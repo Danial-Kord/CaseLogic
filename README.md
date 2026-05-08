@@ -6,6 +6,8 @@ Full spec: [openclaw_hackathon_baseline_architecture.md](openclaw_hackathon_base
 
 For a short cheat sheet on adapters, extraction/retrieval/reasoning/verification, and OpenClaw’s role, see **Architecture Q&A** below (after the kickoff checklist).
 
+**Phased prep plan with technology guide:** [docs/plan.md](docs/plan.md).
+
 ## Current state
 
 **Pre-kickoff scaffolding only.** Every module file contains a one-line docstring and nothing else. No logic is implemented yet — that happens at kickoff once the eval set drops.
