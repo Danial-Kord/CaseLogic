@@ -1,0 +1,8 @@
+{
+  "name": "evenup-openclaw-hackathon",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "echo \"frontend toolchain not yet initialized\" && exit 1"
+  }
+}

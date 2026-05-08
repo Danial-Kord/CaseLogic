@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+anthropic
+chromadb
+sqlalchemy
+beautifulsoup4
+pypdf
+httpx
+python-dotenv
+pydantic
