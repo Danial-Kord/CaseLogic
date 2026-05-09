@@ -171,6 +171,82 @@ class Profile(Base):
     )
 
 
+class Plan(Base):
+    """One generated research plan.
+
+    A plan is the product of the planning agent: the user supplies an
+    incident description, and the orchestrator runs three sub-agents
+    (related cases, people to reach out, recommended brief) over the
+    statutes retrieved for that incident. Each sub-agent's output is
+    persisted as a sibling `PlanSection` row.
+
+    `plan_id` is a UUID-shaped slug used as the public identifier — same
+    pattern as `ChatSession.session_id`. `title` is auto-generated from
+    the first ~80 chars of `incident_text`; users don't currently rename.
+
+    `status` transitions: "running" -> "done" on a successful generation,
+    or "running" -> "error" if any sub-agent or the orchestrator itself
+    raises. We never delete partial plans on error — keeping them lets
+    the user see how far we got and is useful for debugging hung runs.
+    """
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    incident_text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="running")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    sections: Mapped[list["PlanSection"]] = relationship(
+        "PlanSection",
+        back_populates="plan",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="PlanSection.id",
+    )
+
+
+class PlanSection(Base):
+    """One section produced by a sub-agent within a plan.
+
+    `kind` is byte-exact one of:
+      - "related_cases" — related-cases sub-agent output
+      - "contacts"      — people-to-reach-out sub-agent (roles only)
+      - "brief"         — recommended brief outline
+
+    `content_md` is markdown the frontend renders directly.
+    `metadata_json` carries auxiliary data — currently the cited statute
+    slugs so the UI can render clickable chips that open the full text.
+    """
+
+    __tablename__ = "plan_sections"
+    __table_args__ = (
+        UniqueConstraint("plan_id_fk", "kind", name="uq_plan_sections_plan_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id_fk: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("plans.plan_id", ondelete="CASCADE"),
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(32))
+    content_md: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="sections")
+
+
 class ChatMessage(Base):
     """One message inside a chat session.
 

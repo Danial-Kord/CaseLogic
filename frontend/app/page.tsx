@@ -46,6 +46,12 @@ function SiteHeader() {
           >
             How it works
           </a>
+          <Link
+            href="/plans"
+            className="hidden text-sm font-medium text-brand-secondary transition-colors hover:text-brand-primary sm:inline"
+          >
+            {strings.planning.nav.plans}
+          </Link>
           <ThemeToggle />
           <Link
             href="/research"

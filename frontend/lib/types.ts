@@ -251,6 +251,77 @@ export type ThinkingStep =
       summary?: string;
     };
 
+// Planning workspace. Mirrors backend/api/routes_plans.py contracts —
+// see `backend/planning/orchestrator.py` for the SSE vocabulary the
+// stream consumer in `app/plans/page.tsx` listens to.
+
+export type PlanStatus = "running" | "done" | "error";
+
+/**
+ * Section kinds the planning agent emits, in display order. Byte-exact
+ * with `backend.planning.orchestrator.SECTION_KINDS`.
+ */
+export type PlanSectionKind = "related_cases" | "contacts" | "brief";
+
+export interface PlanSection {
+  kind: PlanSectionKind;
+  content_md: string;
+  cited_statute_ids: string[];
+  created_at: string;
+}
+
+export interface PlanSummary {
+  plan_id: string;
+  title: string;
+  status: PlanStatus;
+  section_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanDetail {
+  plan_id: string;
+  title: string;
+  status: PlanStatus;
+  incident_text: string;
+  sections: PlanSection[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanListResponse {
+  plans: PlanSummary[];
+}
+
+export interface CreatePlanRequest {
+  incident_text: string;
+}
+
+export interface CreatePlanResponse {
+  plan_id: string;
+  title: string;
+  status: PlanStatus;
+}
+
+/**
+ * SSE events emitted by `POST /plans/{id}/run/stream`. Mirrors
+ * `OnEventFn` in the orchestrator plus the terminal `final` / `error`
+ * frame the route adds.
+ */
+export type PlanStreamEvent =
+  | { type: "started" }
+  | { type: "retrieving" }
+  | { type: "retrieved"; count: number }
+  | { type: "agent_start"; kind: PlanSectionKind; label: string }
+  | {
+      type: "agent_done";
+      kind: PlanSectionKind;
+      content_md: string;
+      cited_statute_ids: string[];
+    }
+  | { type: "final"; [k: string]: unknown }
+  | { type: "error"; detail: string; status?: number };
+
 // Single-user demo profile. Persisted server-side; injected into the LLM
 // system prompt on every chat send so responses are tailored.
 export interface Profile {

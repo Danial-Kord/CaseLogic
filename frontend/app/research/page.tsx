@@ -247,14 +247,30 @@ export default function ResearchPage() {
     <BookmarksProvider>
       <div className="flex h-screen flex-col">
         <header className="flex items-center justify-between border-b border-brand-border bg-brand-surface px-6 py-4">
-          <Link href="/" className="flex items-baseline gap-3 group">
-            <span className="font-serif text-xl text-brand-primary transition-colors group-hover:text-brand-accent">
-              {strings.app.name}
-            </span>
-            <span className="text-xs text-brand-muted">
-              {strings.app.tagline}
-            </span>
-          </Link>
+          <div className="flex items-baseline gap-6">
+            <Link href="/" className="flex items-baseline gap-3 group">
+              <span className="font-serif text-xl text-brand-primary transition-colors group-hover:text-brand-accent">
+                {strings.app.name}
+              </span>
+              <span className="text-xs text-brand-muted">
+                {strings.app.tagline}
+              </span>
+            </Link>
+            <nav className="flex items-baseline gap-4 text-sm">
+              <Link
+                href="/research"
+                className="font-semibold text-brand-primary"
+              >
+                {strings.planning.nav.research}
+              </Link>
+              <Link
+                href="/plans"
+                className="text-brand-muted transition-colors hover:text-brand-primary"
+              >
+                {strings.planning.nav.plans}
+              </Link>
+            </nav>
+          </div>
           <div className="flex items-center gap-3">
             <DatasetStatus />
             <ThemeToggle />

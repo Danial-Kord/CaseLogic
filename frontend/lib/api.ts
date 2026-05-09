@@ -2,9 +2,14 @@ import type {
   ChatDetail,
   ChatListResponse,
   ChatStreamEvent,
+  CreatePlanResponse,
   FactorsResponse,
   JurisdictionsResponse,
   MatchedVia,
+  PlanDetail,
+  PlanListResponse,
+  PlanSection,
+  PlanStreamEvent,
   Profile,
   SearchRequest,
   SearchResponse,
@@ -183,7 +188,7 @@ function mockSearch(request: SearchRequest): SearchResponse {
 // `data: <json>\n` (sometimes split across multiple `data:` lines per the
 // spec, but our backend always emits one). Comment lines starting with ":"
 // are heartbeats — skip them.
-function parseSseFrame(frame: string): ChatStreamEvent | null {
+function parseSseFrame<T = ChatStreamEvent>(frame: string): T | null {
   const lines = frame.split("\n");
   const dataLines: string[] = [];
   for (const raw of lines) {
@@ -195,7 +200,7 @@ function parseSseFrame(frame: string): ChatStreamEvent | null {
   }
   if (dataLines.length === 0) return null;
   try {
-    return JSON.parse(dataLines.join("\n")) as ChatStreamEvent;
+    return JSON.parse(dataLines.join("\n")) as T;
   } catch {
     return null;
   }
@@ -505,6 +510,194 @@ class ApiClient {
       throw new Error("Stream ended without a final event");
     }
     return final;
+  }
+
+  // ----- Planning workspace ------------------------------------------------
+
+  async listPlans(): Promise<PlanListResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(120);
+      return { plans: [] };
+    }
+    const res = await fetch(`${this.baseUrl}/plans`);
+    if (!res.ok) throw new Error(`List plans failed: ${res.status}`);
+    return res.json();
+  }
+
+  async createPlan(incidentText: string): Promise<CreatePlanResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(120);
+      return {
+        plan_id: Math.random().toString(36).slice(2, 14),
+        title: incidentText.slice(0, 80),
+        status: "running",
+      };
+    }
+    const res = await fetch(`${this.baseUrl}/plans`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_text: incidentText }),
+    });
+    if (!res.ok) throw new Error(`Create plan failed: ${res.status}`);
+    return res.json();
+  }
+
+  async getPlan(planId: string): Promise<PlanDetail> {
+    if (this.mockMode) throw new Error("Mock mode: getPlan not supported");
+    const res = await fetch(
+      `${this.baseUrl}/plans/${encodeURIComponent(planId)}`,
+    );
+    if (res.status === 404) throw new Error("Plan not found");
+    if (!res.ok) throw new Error(`Get plan failed: ${res.status}`);
+    return res.json();
+  }
+
+  async deletePlan(planId: string): Promise<void> {
+    if (this.mockMode) return;
+    const res = await fetch(
+      `${this.baseUrl}/plans/${encodeURIComponent(planId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Delete plan failed: ${res.status}`);
+    }
+  }
+
+  /**
+   * Stream a planning run's SSE events. Resolves with the full PlanDetail
+   * once the terminal `final` frame arrives. In mock mode we synthesize a
+   * canned three-section run from MOCK_STATUTES so the workspace is
+   * navigable offline.
+   */
+  async streamPlanRun(
+    planId: string,
+    onEvent: (event: PlanStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<PlanDetail> {
+    if (this.mockMode) {
+      return this.mockStreamPlanRun(planId, onEvent);
+    }
+
+    const res = await fetch(
+      `${this.baseUrl}/plans/${encodeURIComponent(planId)}/run/stream`,
+      {
+        method: "POST",
+        headers: { Accept: "text/event-stream" },
+        signal,
+      },
+    );
+    if (!res.ok || !res.body) {
+      throw new Error(`Plan stream failed: ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let final: PlanDetail | null = null;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sepIdx: number;
+        while ((sepIdx = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sepIdx);
+          buffer = buffer.slice(sepIdx + 2);
+          const evt = parseSseFrame<PlanStreamEvent>(frame);
+          if (!evt) continue;
+          onEvent(evt);
+          if (evt.type === "final") {
+            // The orchestrator dumps the full PlanDetail body alongside
+            // `type: "final"`; strip that key for the resolved payload.
+            const { type: _t, ...rest } = evt as Record<string, unknown> & {
+              type: string;
+            };
+            final = rest as unknown as PlanDetail;
+          } else if (evt.type === "error") {
+            throw new Error(
+              evt.detail || `Plan stream error (${evt.status ?? "?"})`,
+            );
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+
+    if (!final) throw new Error("Plan stream ended without a final event");
+    return final;
+  }
+
+  // -- mock-mode plan generator -------------------------------------------
+  private async mockStreamPlanRun(
+    planId: string,
+    onEvent: (event: PlanStreamEvent) => void,
+  ): Promise<PlanDetail> {
+    await this.simulateLatency(120);
+    onEvent({ type: "started" });
+    onEvent({ type: "retrieving" });
+    await this.simulateLatency(220);
+    onEvent({ type: "retrieved", count: 3 });
+
+    const sections: PlanSection[] = [
+      {
+        kind: "related_cases",
+        content_md:
+          "### Speed and right-of-way\n" +
+          "The basic-speed law applies any time conditions warrant a slower speed than the posted limit. [cite: ca-veh-22350]\n\n" +
+          "Red-signal compliance is mandatory at marked limit lines. [cite: ca-veh-21453-a]",
+        cited_statute_ids: ["ca-veh-22350", "ca-veh-21453-a"],
+        created_at: new Date().toISOString(),
+      },
+      {
+        kind: "contacts",
+        content_md:
+          "### First responders\n" +
+          "- Investigating officer at the responding agency \u2014 request the traffic-collision report. [cite: ca-veh-21453-a]\n\n" +
+          "### Medical / experts\n" +
+          "- Treating physician of record \u2014 request medical records and a causation declaration.",
+        cited_statute_ids: ["ca-veh-21453-a"],
+        created_at: new Date().toISOString(),
+      },
+      {
+        kind: "brief",
+        content_md:
+          "### Caption\n[Plaintiff] v. [Defendant], Case No. [Case No.]\n\n" +
+          "### Statutory basis\n- Basic speed law violation. [cite: ca-veh-22350]\n\n" +
+          "_This is a research prototype, not legal advice._",
+        cited_statute_ids: ["ca-veh-22350"],
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    for (const section of sections) {
+      const labels: Record<PlanSection["kind"], string> = {
+        related_cases: "Drafting related cases",
+        contacts: "Drafting people to reach out",
+        brief: "Drafting recommended brief",
+      };
+      onEvent({ type: "agent_start", kind: section.kind, label: labels[section.kind] });
+      await this.simulateLatency(380);
+      onEvent({
+        type: "agent_done",
+        kind: section.kind,
+        content_md: section.content_md,
+        cited_statute_ids: section.cited_statute_ids,
+      });
+    }
+
+    const detail: PlanDetail = {
+      plan_id: planId,
+      title: "Mocked plan",
+      status: "done",
+      incident_text: "(mock incident)",
+      sections,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    onEvent({ type: "final", ...(detail as unknown as Record<string, unknown>) });
+    return detail;
   }
 
   // ----- Profile (single-user demo) ---------------------------------------

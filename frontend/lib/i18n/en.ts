@@ -139,6 +139,64 @@ export const strings = {
     },
   },
 
+  planning: {
+    nav: {
+      research: "Research",
+      plans: "Plans",
+    },
+    statusLabel: {
+      running: "Running",
+      done: "Done",
+      error: "Error",
+    } as Record<"running" | "done" | "error", string>,
+    sectionKind: {
+      related_cases: "Step 1",
+      contacts: "Step 2",
+      brief: "Step 3",
+    } as Record<"related_cases" | "contacts" | "brief", string>,
+    sectionTitle: {
+      related_cases: "Related cases & statutes",
+      contacts: "People to reach out to",
+      brief: "Recommended brief outline",
+    } as Record<"related_cases" | "contacts" | "brief", string>,
+    sidebar: {
+      title: "Planning workspace",
+      subtitle: "Generate a starter plan from an incident description.",
+      newCta: "+ New plan",
+      historyTitle: "History",
+      empty: "No plans yet. Click \u201cNew plan\u201d to start.",
+      deleteAria: (title: string) => `Delete plan \u201c${title}\u201d`,
+      deleteConfirm: (title: string) => `Delete \u201c${title}\u201d?`,
+    },
+    composer: {
+      headline: "Sketch a research plan",
+      subhead:
+        "Describe the incident in plain language. The planner retrieves CA Vehicle Code statutes, then drafts related cases, role-based contacts, and a brief outline you can adapt.",
+      label: "Incident description",
+      placeholder:
+        "e.g. Hit-and-run at intersection \u2014 client (pedestrian) suffered fractured tibia after opposing driver ran a red light at high speed.",
+      submit: "Generate plan",
+      submitting: "Generating\u2026",
+      disclaimer: "Research prototype \u2014 not legal advice.",
+      samplesTitle: "Try a sample",
+    },
+    workspace: {
+      incidentLabel: "Incident",
+      disclaimer:
+        "Generated content is a research draft. Verify every citation against the linked source before relying on it.",
+    },
+    section: {
+      waiting: "Waiting for the previous step to complete\u2026",
+      running: "Drafting this section\u2026",
+      errored: "This section couldn't be generated. Try a new plan.",
+      citedTitle: "Cited statutes",
+      statusPending: "Pending",
+      statusRunning: "Running",
+      statusDone: "Done",
+      statusError: "Error",
+    },
+  },
+
   themeToggle: {
     ariaLabel: "Color theme",
     optionLabel: {

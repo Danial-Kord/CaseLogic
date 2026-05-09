@@ -47,6 +47,7 @@ from backend.api import (  # noqa: E402
     routes_chat,
     routes_chats,
     routes_ingest,
+    routes_plans,
     routes_profile,
     routes_statutes,
     routes_status,
@@ -57,4 +58,5 @@ app.include_router(routes_ingest.router)
 app.include_router(routes_statutes.router)
 app.include_router(routes_chat.router)
 app.include_router(routes_chats.router)
+app.include_router(routes_plans.router)
 app.include_router(routes_profile.router)
