@@ -1,6 +1,7 @@
 "use client";
 
-import type { ChatSummary } from "@/lib/types";
+import type { ChatSummary, Profile } from "@/lib/types";
+import ProfileCard from "./ProfileCard";
 
 interface ChatSidebarProps {
   chats: ChatSummary[];
@@ -8,6 +9,8 @@ interface ChatSidebarProps {
   onSelect: (chatId: string) => void;
   onNew: () => void;
   onDelete: (chatId: string) => void;
+  profile: Profile;
+  onEditProfile: () => void;
 }
 
 export default function ChatSidebar({
@@ -16,9 +19,12 @@ export default function ChatSidebar({
   onSelect,
   onNew,
   onDelete,
+  profile,
+  onEditProfile,
 }: ChatSidebarProps) {
   return (
     <aside className="flex flex-col h-full overflow-hidden rounded-lg border border-brand-border bg-brand-surface">
+      <ProfileCard profile={profile} onEdit={onEditProfile} />
       <div className="border-b border-brand-border p-3">
         <button
           type="button"

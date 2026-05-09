@@ -131,3 +131,13 @@ export interface SendMessageResponse {
   assistant_message: ChatMessage;
   chat_title: string;
 }
+
+// Single-user demo profile. Persisted server-side; injected into the LLM
+// system prompt on every chat send so responses are tailored.
+export interface Profile {
+  name: string;
+  role: string;
+  firm: string;
+  about: string;
+  updated_at: string | null;
+}
