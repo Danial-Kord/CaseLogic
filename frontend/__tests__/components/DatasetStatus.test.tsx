@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import DatasetStatus from "@/components/DatasetStatus";
 import { api } from "@/lib/api";
+import type { StatusResponse } from "@/lib/types";
 
 jest.mock("@/lib/api", () => ({
   api: {
@@ -8,38 +9,75 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+function makeStatus(overrides: Partial<StatusResponse> = {}): StatusResponse {
+  return {
+    indexed_documents: 0,
+    sample_urls: [],
+    indexed_statutes: 0,
+    jurisdictions: [],
+    last_eval_run_at: null,
+    last_eval_recall_at_5: null,
+    last_eval_citation_recall_at_1: null,
+    ...overrides,
+  };
+}
+
 describe("DatasetStatus", () => {
   afterEach(() => {
     jest.resetAllMocks();
   });
 
   it("shows a loading indicator before the first fetch resolves", () => {
-    // Never resolves so we stay in loading state
     jest.mocked(api.getStatus).mockReturnValue(new Promise(() => {}));
     render(<DatasetStatus />);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
-  it("shows indexed doc count after a successful fetch", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue({
-      indexed_count: 1547,
-      jurisdictions: ["CA"],
-    });
+  it("shows indexed statute count after a successful fetch", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({ indexed_statutes: 1547, jurisdictions: ["California"] })
+    );
     render(<DatasetStatus />);
     await waitFor(() => {
-      expect(screen.getByText(/1,547 docs indexed/i)).toBeInTheDocument();
+      expect(screen.getByText(/1,547 statutes indexed/i)).toBeInTheDocument();
     });
   });
 
   it("shows the jurisdiction list after a successful fetch", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue({
-      indexed_count: 100,
-      jurisdictions: ["CA", "TX"],
-    });
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({
+        indexed_statutes: 100,
+        jurisdictions: ["California", "Texas"],
+      })
+    );
     render(<DatasetStatus />);
     await waitFor(() => {
-      expect(screen.getByText(/CA, TX/i)).toBeInTheDocument();
+      expect(screen.getByText(/California, Texas/i)).toBeInTheDocument();
     });
+  });
+
+  it("renders an eval recall@5 badge when last_eval_recall_at_5 is set", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({
+        indexed_statutes: 41,
+        jurisdictions: ["California"],
+        last_eval_recall_at_5: 0.87,
+        last_eval_run_at: "2026-05-09T13:30:00.000Z",
+      })
+    );
+    render(<DatasetStatus />);
+    await waitFor(() => {
+      expect(screen.getByText(/recall@5 87%/i)).toBeInTheDocument();
+    });
+  });
+
+  it("hides the eval badge when last_eval_recall_at_5 is null", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({ indexed_statutes: 41, jurisdictions: ["California"] })
+    );
+    render(<DatasetStatus />);
+    await waitFor(() => screen.getByText(/statutes indexed/i));
+    expect(screen.queryByText(/recall@5/i)).not.toBeInTheDocument();
   });
 
   it("shows 'Backend offline' error when the fetch fails", async () => {
@@ -54,6 +92,6 @@ describe("DatasetStatus", () => {
     jest.mocked(api.getStatus).mockRejectedValue(new Error("timeout"));
     render(<DatasetStatus />);
     await waitFor(() => screen.getByText(/backend offline/i));
-    expect(screen.queryByText(/docs indexed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/statutes indexed/i)).not.toBeInTheDocument();
   });
 });

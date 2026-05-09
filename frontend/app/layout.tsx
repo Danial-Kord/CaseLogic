@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import { strings } from "@/lib/i18n/en";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CaseLogic — Source-grounded PI legal research",
-  description:
-    "Hackathon prototype for personal-injury legal research. Source-grounded answers from public case law.",
+  title: strings.app.metaTitle,
+  description: strings.app.metaDescription,
 };
 
 export default function RootLayout({
