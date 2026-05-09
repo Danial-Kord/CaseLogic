@@ -1,13 +1,13 @@
 "use client";
 
-import type { StatuteResult } from "@/lib/types";
+import type { StatuteHit } from "@/lib/types";
 
 interface ResultsPanelProps {
-  results: StatuteResult[];
+  results: StatuteHit[];
   isLoading: boolean;
   query: string;
-  onSelect: (result: StatuteResult) => void;
-  selectedCitation?: string;
+  onSelect: (result: StatuteHit) => void;
+  selectedStatuteId?: string | null;
 }
 
 export default function ResultsPanel({
@@ -15,7 +15,7 @@ export default function ResultsPanel({
   isLoading,
   query,
   onSelect,
-  selectedCitation,
+  selectedStatuteId,
 }: ResultsPanelProps) {
   if (isLoading) {
     return (
@@ -49,7 +49,7 @@ export default function ResultsPanel({
         <ResultCard
           key={result.statute_id}
           result={result}
-          isSelected={result.citation === selectedCitation}
+          isSelected={result.statute_id === selectedStatuteId}
           onSelect={onSelect}
         />
       ))}
@@ -62,17 +62,15 @@ function ResultCard({
   isSelected,
   onSelect,
 }: {
-  result: StatuteResult;
+  result: StatuteHit;
   isSelected: boolean;
-  onSelect: (r: StatuteResult) => void;
+  onSelect: (r: StatuteHit) => void;
 }) {
-  // TODO: wire "show more" toggle to expand to full complete_statute once
-  // backend returns that field alongside the truncated text
   const TRUNCATE_AT = 280;
   const truncated =
-    result.text.length > TRUNCATE_AT
-      ? result.text.slice(0, TRUNCATE_AT) + "…"
-      : result.text;
+    result.statute_text.length > TRUNCATE_AT
+      ? result.statute_text.slice(0, TRUNCATE_AT) + "…"
+      : result.statute_text;
 
   return (
     <div
@@ -86,16 +84,18 @@ function ResultCard({
           : "border-brand-border hover:border-brand-accent"
       }`}
     >
-      {/* citation — monospace per design spec */}
-      <p className="font-mono text-sm font-semibold text-brand-primary">
-        {result.citation}
-      </p>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="font-mono text-sm font-semibold text-brand-primary">
+          {result.universal_citation}
+        </p>
+        <span className="text-[10px] uppercase tracking-wide text-brand-muted">
+          {result.matched_via}
+        </span>
+      </div>
 
-      {/* statute text */}
       <p className="mt-1 text-sm text-brand-secondary">{truncated}</p>
 
-      {/* factor chips */}
-      {result.factors && result.factors.length > 0 && (
+      {result.factors.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {result.factors.map((f) => (
             <span
@@ -108,7 +108,6 @@ function ResultCard({
         </div>
       )}
 
-      {/* leginfo link — required on every result per hard constraints */}
       <a
         href={result.official_url}
         target="_blank"

@@ -20,7 +20,6 @@ export default function DatasetStatus() {
     }
 
     fetchStatus();
-    // Poll every 30 seconds
     const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -48,12 +47,17 @@ export default function DatasetStatus() {
       <div className="flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-brand-verified" />
         <span className="text-brand-muted">
-          {status.indexed_count.toLocaleString()} docs indexed
+          {status.indexed_statutes.toLocaleString()} statutes indexed
         </span>
       </div>
       {status.jurisdictions.length > 0 && (
         <span className="text-brand-muted">
           {status.jurisdictions.join(", ")}
+        </span>
+      )}
+      {status.last_eval_recall_at_5 != null && (
+        <span className="text-brand-muted">
+          recall@5 {(status.last_eval_recall_at_5 * 100).toFixed(0)}%
         </span>
       )}
     </div>

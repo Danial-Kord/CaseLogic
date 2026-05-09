@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { SearchRequest, FactorCategory } from "@/lib/types";
+import type { SearchRequest, FactorCount } from "@/lib/types";
 import { api } from "@/lib/api";
 
-// TODO: confirm canonical citation form with Person 4 (docs/api.md)
-// Matches: "Cal. Veh. Code § 23152(a)", "§ 23152", "23152(a)", "21453"
-const CITATION_RE = /^(cal\.?\s*veh\.?\s*code\s*)?§?\s*\d{4,5}(\([a-z]\))?$/i;
+// Matches: "Cal. Veh. Code § 23152(a)", "§ 23152", "23152(a)", "21453". The
+// backend has its own canonical regex in backend/retrieval/__init__.py — this
+// is just a UI hint, not the source of truth.
+const CITATION_RE = /^(cal\.?\s*veh\.?\s*code\s*)?§?\s*\d{3,5}(\.\d+)?(\([a-z0-9]\))?$/i;
 
 interface SearchPanelProps {
   onSearch: (request: SearchRequest) => void;
@@ -16,11 +17,10 @@ interface SearchPanelProps {
 export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const [query, setQuery] = useState("");
   const [factor, setFactor] = useState("");
-  const [factors, setFactors] = useState<FactorCategory[]>([]);
+  const [factors, setFactors] = useState<FactorCount[]>([]);
   const [factorsError, setFactorsError] = useState(false);
 
   useEffect(() => {
-    // TODO: replace mock with live GET /factors once Person 4's endpoint is up
     api
       .getFactors()
       .then((res) => setFactors(res.factors))
@@ -33,7 +33,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     if (!trimmed) return;
     onSearch({
       query: trimmed,
-      filters: factor ? { factor } : undefined,
+      factor: factor || undefined,
       top_k: 10,
     });
   }
@@ -70,7 +70,6 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
         <label className="block text-xs font-medium text-brand-muted mb-1">
           Contributing factor
         </label>
-        {/* TODO: counts come from GET /factors; currently mocked */}
         <select
           value={factor}
           onChange={(e) => setFactor(e.target.value)}
@@ -80,7 +79,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
           <option value="">All factors</option>
           {factors.map((f) => (
             <option key={f.factor} value={f.factor}>
-              {f.factor} ({f.count})
+              {f.factor} ({f.statute_count})
             </option>
           ))}
         </select>

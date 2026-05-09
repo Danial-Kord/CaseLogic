@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { StatuteResult } from "@/lib/types";
+import type { StatuteDetail } from "@/lib/types";
 import { api } from "@/lib/api";
 
 interface SourceViewerProps {
-  citation: string | null;
+  statuteId: string | null;
 }
 
-export default function SourceViewer({ citation }: SourceViewerProps) {
-  const [statute, setStatute] = useState<StatuteResult | null>(null);
+export default function SourceViewer({ statuteId }: SourceViewerProps) {
+  const [statute, setStatute] = useState<StatuteDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!citation) {
+    if (!statuteId) {
       setStatute(null);
       setError(null);
       return;
@@ -23,16 +23,25 @@ export default function SourceViewer({ citation }: SourceViewerProps) {
     setIsLoading(true);
     setError(null);
 
-    // TODO: when backend returns complete_statute (full multi-subdivision text),
-    // swap StatuteResult for a richer StatuteDetail type
+    let cancelled = false;
     api
-      .getStatute(citation)
-      .then(setStatute)
-      .catch(() => setError("Statute not found."))
-      .finally(() => setIsLoading(false));
-  }, [citation]);
+      .getStatute(statuteId)
+      .then((s) => {
+        if (!cancelled) setStatute(s);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Statute not found.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
-  if (!citation) {
+    return () => {
+      cancelled = true;
+    };
+  }, [statuteId]);
+
+  if (!statuteId) {
     return (
       <p className="text-sm text-brand-muted">
         Select a result to view the full section text.
@@ -52,20 +61,33 @@ export default function SourceViewer({ citation }: SourceViewerProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* citation header */}
       <p className="font-mono text-sm font-semibold text-brand-primary">
-        {statute.citation}
+        {statute.universal_citation}
       </p>
 
-      {/* full statute text */}
-      {/* TODO: render subdivision structure (a), (b), (c)… when backend
-          returns parsed paragraphs rather than a single text blob */}
+      {(statute.division || statute.chapter) && (
+        <p className="text-xs text-brand-muted">
+          {[statute.division, statute.chapter].filter(Boolean).join(" · ")}
+        </p>
+      )}
+
       <p className="whitespace-pre-wrap text-sm text-brand-secondary leading-relaxed">
-        {statute.text}
+        {statute.statute_text}
       </p>
 
-      {/* factor chips */}
-      {statute.factors && statute.factors.length > 0 && (
+      {statute.complete_statute &&
+        statute.complete_statute !== statute.statute_text && (
+          <details className="text-xs text-brand-muted">
+            <summary className="cursor-pointer text-brand-accent hover:underline">
+              Show formatted citation
+            </summary>
+            <p className="mt-2 whitespace-pre-wrap text-brand-secondary">
+              {statute.complete_statute}
+            </p>
+          </details>
+        )}
+
+      {statute.factors.length > 0 && (
         <div>
           <p className="text-xs font-medium text-brand-muted mb-1">
             Contributing factors
@@ -83,7 +105,6 @@ export default function SourceViewer({ citation }: SourceViewerProps) {
         </div>
       )}
 
-      {/* leginfo link — required per hard constraints */}
       <a
         href={statute.official_url}
         target="_blank"
@@ -93,11 +114,14 @@ export default function SourceViewer({ citation }: SourceViewerProps) {
         Open on leginfo →
       </a>
 
-      {/* source provenance panel */}
-      {/* TODO: add last_fetched date once backend exposes it on StatuteDetail */}
       <div className="rounded bg-gray-50 px-3 py-2 text-xs text-brand-muted border border-brand-border">
         <p className="font-medium mb-0.5">Source</p>
         <p className="break-all">{statute.official_url}</p>
+        {statute.retrieved_at && (
+          <p className="mt-1">
+            Retrieved {new Date(statute.retrieved_at).toLocaleDateString()}
+          </p>
+        )}
       </div>
     </div>
   );

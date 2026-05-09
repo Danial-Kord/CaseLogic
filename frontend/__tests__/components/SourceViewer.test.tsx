@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import SourceViewer from "@/components/SourceViewer";
 import { api } from "@/lib/api";
+import type { StatuteDetail } from "@/lib/types";
 
 jest.mock("@/lib/api", () => ({
   api: {
@@ -8,13 +9,22 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
-const MOCK_STATUTE = {
-  statute_id: "ca-veh-23152a",
-  citation: "Cal. Veh. Code § 23152(a)",
-  text: "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+const MOCK_STATUTE: StatuteDetail = {
+  statute_id: "ca-veh-23152-a",
+  universal_citation: "Cal. Veh. Code § 23152(a)",
+  jurisdiction: "California",
+  code_name: "Cal. Veh. Code",
+  section_number: "23152",
+  subdivision: "a",
+  division: null,
+  chapter: null,
+  statute_text:
+    "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+  complete_statute: "",
   official_url:
     "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
   factors: ["DUI/DWI"],
+  retrieved_at: null,
 };
 
 describe("SourceViewer", () => {
@@ -22,21 +32,20 @@ describe("SourceViewer", () => {
     jest.resetAllMocks();
   });
 
-  it("renders placeholder text when citation prop is null", () => {
-    render(<SourceViewer citation={null} />);
+  it("renders placeholder text when statuteId prop is null", () => {
+    render(<SourceViewer statuteId={null} />);
     expect(screen.getByText(/select a result/i)).toBeInTheDocument();
   });
 
   it("shows loading indicator while fetching the statute", () => {
-    // Never resolves so we stay in loading state
     jest.mocked(api.getStatute).mockReturnValue(new Promise(() => {}));
-    render(<SourceViewer citation="Cal. Veh. Code § 23152(a)" />);
+    render(<SourceViewer statuteId="ca-veh-23152-a" />);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
   it("shows error message when the statute is not found", async () => {
     jest.mocked(api.getStatute).mockRejectedValue(new Error("Not found"));
-    render(<SourceViewer citation="Cal. Veh. Code § 99999" />);
+    render(<SourceViewer statuteId="ca-veh-99999" />);
     await waitFor(() => {
       expect(screen.getByText(/statute not found/i)).toBeInTheDocument();
     });
@@ -44,7 +53,7 @@ describe("SourceViewer", () => {
 
   it("renders citation, full text, and factor chips when loaded", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
-    render(<SourceViewer citation="Cal. Veh. Code § 23152(a)" />);
+    render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => {
       expect(
         screen.getByText("Cal. Veh. Code § 23152(a)")
@@ -56,7 +65,7 @@ describe("SourceViewer", () => {
 
   it("renders 'Open on leginfo' link pointing to official_url", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
-    render(<SourceViewer citation="Cal. Veh. Code § 23152(a)" />);
+    render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => {
       const link = screen.getByRole("link", { name: /open on leginfo/i });
       expect(link).toHaveAttribute("href", MOCK_STATUTE.official_url);
@@ -65,7 +74,7 @@ describe("SourceViewer", () => {
 
   it("renders source provenance panel with the official URL", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
-    render(<SourceViewer citation="Cal. Veh. Code § 23152(a)" />);
+    render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => {
       expect(screen.getByText("Source")).toBeInTheDocument();
       expect(
@@ -74,43 +83,38 @@ describe("SourceViewer", () => {
     });
   });
 
-  it("calls getStatute with the provided citation", async () => {
+  it("calls getStatute with the provided statuteId slug", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
-    render(<SourceViewer citation="Cal. Veh. Code § 23152(a)" />);
+    render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => screen.getByText(/under the influence/i));
     expect(jest.mocked(api.getStatute)).toHaveBeenCalledWith(
-      "Cal. Veh. Code § 23152(a)"
+      "ca-veh-23152-a"
     );
   });
 
-  it("refetches when the citation prop changes", async () => {
-    const secondStatute = {
+  it("refetches when the statuteId prop changes", async () => {
+    const secondStatute: StatuteDetail = {
       ...MOCK_STATUTE,
-      citation: "Cal. Veh. Code § 23103(a)",
-      text: "Reckless driving statute text.",
+      statute_id: "ca-veh-23103-a",
+      universal_citation: "Cal. Veh. Code § 23103(a)",
+      statute_text: "Reckless driving statute text.",
     };
     jest.mocked(api.getStatute).mockResolvedValueOnce(MOCK_STATUTE);
-    const { rerender } = render(
-      <SourceViewer citation="Cal. Veh. Code § 23152(a)" />
-    );
+    const { rerender } = render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => screen.getByText(/under the influence/i));
 
     jest.mocked(api.getStatute).mockResolvedValueOnce(secondStatute);
-    rerender(<SourceViewer citation="Cal. Veh. Code § 23103(a)" />);
-    await waitFor(() =>
-      screen.getByText("Cal. Veh. Code § 23103(a)")
-    );
+    rerender(<SourceViewer statuteId="ca-veh-23103-a" />);
+    await waitFor(() => screen.getByText("Cal. Veh. Code § 23103(a)"));
     expect(jest.mocked(api.getStatute)).toHaveBeenCalledTimes(2);
   });
 
-  it("clears content and shows placeholder when citation becomes null", async () => {
+  it("clears content and shows placeholder when statuteId becomes null", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
-    const { rerender } = render(
-      <SourceViewer citation="Cal. Veh. Code § 23152(a)" />
-    );
+    const { rerender } = render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => screen.getByText(/under the influence/i));
 
-    rerender(<SourceViewer citation={null} />);
+    rerender(<SourceViewer statuteId={null} />);
     expect(screen.getByText(/select a result/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/under the influence/i)

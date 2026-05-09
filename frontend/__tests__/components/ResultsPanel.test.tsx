@@ -1,25 +1,43 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import ResultsPanel from "@/components/ResultsPanel";
-import type { StatuteResult } from "@/lib/types";
+import type { StatuteHit } from "@/lib/types";
 
-const MOCK_RESULTS: StatuteResult[] = [
+const MOCK_RESULTS: StatuteHit[] = [
   {
-    statute_id: "ca-veh-23152a",
-    citation: "Cal. Veh. Code § 23152(a)",
-    text: "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+    statute_id: "ca-veh-23152-a",
+    universal_citation: "Cal. Veh. Code § 23152(a)",
+    jurisdiction: "California",
+    code_name: "Cal. Veh. Code",
+    section_number: "23152",
+    subdivision: "a",
+    division: null,
+    chapter: null,
+    statute_text:
+      "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+    complete_statute: "",
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
     factors: ["DUI/DWI"],
     score: 0.95,
+    matched_via: "vector",
   },
   {
-    statute_id: "ca-veh-23103a",
-    citation: "Cal. Veh. Code § 23103(a)",
-    text: "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
+    statute_id: "ca-veh-23103-a",
+    universal_citation: "Cal. Veh. Code § 23103(a)",
+    jurisdiction: "California",
+    code_name: "Cal. Veh. Code",
+    section_number: "23103",
+    subdivision: "a",
+    division: null,
+    chapter: null,
+    statute_text:
+      "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
+    complete_statute: "",
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23103",
     factors: ["Reckless Driving"],
     score: 0.92,
+    matched_via: "keyword",
   },
 ];
 
@@ -61,7 +79,7 @@ describe("ResultsPanel", () => {
     expect(screen.getByText(/zebra law/i)).toBeInTheDocument();
   });
 
-  it("renders a card per result with its citation", () => {
+  it("renders a card per result with its universal_citation", () => {
     render(
       <ResultsPanel
         results={MOCK_RESULTS}
@@ -139,7 +157,7 @@ describe("ResultsPanel", () => {
         isLoading={false}
         query="driving"
         onSelect={jest.fn()}
-        selectedCitation="Cal. Veh. Code § 23152(a)"
+        selectedStatuteId="ca-veh-23152-a"
       />
     );
     const cards = screen.getAllByRole("button");
@@ -149,7 +167,7 @@ describe("ResultsPanel", () => {
 
   it("truncates statute text longer than 280 characters with an ellipsis", () => {
     const longText = "a".repeat(400);
-    const result: StatuteResult = { ...MOCK_RESULTS[0], text: longText };
+    const result: StatuteHit = { ...MOCK_RESULTS[0], statute_text: longText };
     render(
       <ResultsPanel
         results={[result]}
@@ -158,13 +176,12 @@ describe("ResultsPanel", () => {
         onSelect={jest.fn()}
       />
     );
-    // Truncated text ends with ellipsis character
     expect(screen.getByText(/a+…/)).toBeInTheDocument();
   });
 
   it("does not truncate statute text at or under 280 characters", () => {
     const shortText = "Short statute text.";
-    const result: StatuteResult = { ...MOCK_RESULTS[0], text: shortText };
+    const result: StatuteHit = { ...MOCK_RESULTS[0], statute_text: shortText };
     render(
       <ResultsPanel
         results={[result]}
@@ -174,5 +191,18 @@ describe("ResultsPanel", () => {
       />
     );
     expect(screen.getByText("Short statute text.")).toBeInTheDocument();
+  });
+
+  it("renders matched_via badge on each card", () => {
+    render(
+      <ResultsPanel
+        results={MOCK_RESULTS}
+        isLoading={false}
+        query="driving"
+        onSelect={jest.fn()}
+      />
+    );
+    expect(screen.getByText("vector")).toBeInTheDocument();
+    expect(screen.getByText("keyword")).toBeInTheDocument();
   });
 });
