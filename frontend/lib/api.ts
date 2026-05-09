@@ -1,13 +1,16 @@
 import type {
   FactorsResponse,
+  MatchedVia,
   SearchRequest,
   SearchResponse,
   StatusResponse,
   StatuteDetail,
   StatuteHit,
 } from "./types";
+import { looksLikeCitation } from "./citation";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Default OFF. Flip ON via .env.local while the backend is unreachable.
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
 const MOCK_STATUTES: StatuteDetail[] = [
@@ -103,11 +106,28 @@ const MOCK_FACTORS: FactorsResponse = {
     { factor: "Improper Stopping", statute_count: 3 },
     { factor: "Improper Turning", statute_count: 5 },
     { factor: "Reckless Driving", statute_count: 1 },
-    { factor: "Using a Wireless Telephone/Texting While Driving", statute_count: 2 },
+    {
+      factor: "Using a Wireless Telephone/Texting While Driving",
+      statute_count: 2,
+    },
   ],
 };
 
-function detailToHit(detail: StatuteDetail, score: number): StatuteHit {
+// Pick a plausible matched_via per query so the badge palette is visible
+// in mock mode. Live data carries this from the backend.
+function inferMatchedVia(s: StatuteDetail, query: string): MatchedVia {
+  if (looksLikeCitation(query)) return "citation";
+  const q = query.toLowerCase();
+  if (s.factors.some((f) => f.toLowerCase().includes(q))) return "keyword";
+  if (s.statute_text.toLowerCase().includes(q)) return "hybrid";
+  return "vector";
+}
+
+function detailToHit(
+  detail: StatuteDetail,
+  score: number,
+  matchedVia: MatchedVia
+): StatuteHit {
   return {
     statute_id: detail.statute_id,
     universal_citation: detail.universal_citation,
@@ -122,7 +142,7 @@ function detailToHit(detail: StatuteDetail, score: number): StatuteHit {
     official_url: detail.official_url,
     score,
     factors: detail.factors,
-    matched_via: "hybrid",
+    matched_via: matchedVia,
   };
 }
 
@@ -134,15 +154,18 @@ function mockSearch(request: SearchRequest): SearchResponse {
       s.universal_citation.toLowerCase().includes(q) ||
       s.statute_text.toLowerCase().includes(q) ||
       s.factors.some((f) => f.toLowerCase().includes(q));
-    const matchesFactor =
-      !request.factor || s.factors.includes(request.factor);
+    const matchesFactor = !request.factor || s.factors.includes(request.factor);
     return matchesText && matchesFactor;
   });
   return {
     query: request.query,
     factor: request.factor ?? null,
     top_k,
-    results: filtered.slice(0, top_k).map((s, i) => detailToHit(s, 1 / (60 + i))),
+    results: filtered
+      .slice(0, top_k)
+      .map((s, i) =>
+        detailToHit(s, 1 / (60 + i), inferMatchedVia(s, request.query))
+      ),
   };
 }
 
@@ -150,11 +173,11 @@ function mockStatus(): StatusResponse {
   return {
     indexed_documents: 0,
     sample_urls: [],
-    indexed_statutes: 41,
+    indexed_statutes: 1543,
     jurisdictions: ["California"],
-    last_eval_run_at: null,
-    last_eval_recall_at_5: null,
-    last_eval_citation_recall_at_1: null,
+    last_eval_run_at: "2026-05-09T13:30:00.000Z",
+    last_eval_recall_at_5: 0.87,
+    last_eval_citation_recall_at_1: 1.0,
   };
 }
 
@@ -184,6 +207,9 @@ class ApiClient {
     return res.json();
   }
 
+  // GET /statutes/{statute_id}. Slug must match ^[a-z0-9-]+$ — caller's
+  // responsibility (use lib/citation.parseCitationToSlug). Throws Error("Not
+  // found") on 404 so the caller can branch on UX.
   async getStatute(statuteId: string): Promise<StatuteDetail> {
     if (this.mockMode) {
       await this.simulateLatency(200);
@@ -192,8 +218,6 @@ class ApiClient {
       return found;
     }
 
-    // Backend slug regex is ^[a-z0-9-]+$ — encode defensively but the path
-    // segment shouldn't actually need encoding for valid slugs.
     const encoded = encodeURIComponent(statuteId);
     const res = await fetch(`${this.baseUrl}/statutes/${encoded}`);
     if (res.status === 404) throw new Error("Not found");
@@ -237,7 +261,7 @@ class ApiClient {
     const formatted = searchRes.results
       .map(
         (r, i) =>
-          `**${i + 1}. ${r.universal_citation}**\n${r.statute_text}\n[View source](${r.official_url})${r.factors.length ? `\nFactors: ${r.factors.join(", ")}` : ""}`,
+          `**${i + 1}. ${r.universal_citation}**\n${r.statute_text}\n[View source](${r.official_url})${r.factors.length ? `\nFactors: ${r.factors.join(", ")}` : ""}`
       )
       .join("\n\n---\n\n");
 

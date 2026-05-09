@@ -45,12 +45,39 @@ describe("DatasetStatus", () => {
 
   it("shows the jurisdiction list after a successful fetch", async () => {
     jest.mocked(api.getStatus).mockResolvedValue(
-      makeStatus({ indexed_statutes: 100, jurisdictions: ["California", "Texas"] })
+      makeStatus({
+        indexed_statutes: 100,
+        jurisdictions: ["California", "Texas"],
+      })
     );
     render(<DatasetStatus />);
     await waitFor(() => {
       expect(screen.getByText(/California, Texas/i)).toBeInTheDocument();
     });
+  });
+
+  it("renders an eval recall@5 badge when last_eval_recall_at_5 is set", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({
+        indexed_statutes: 41,
+        jurisdictions: ["California"],
+        last_eval_recall_at_5: 0.87,
+        last_eval_run_at: "2026-05-09T13:30:00.000Z",
+      })
+    );
+    render(<DatasetStatus />);
+    await waitFor(() => {
+      expect(screen.getByText(/recall@5 87%/i)).toBeInTheDocument();
+    });
+  });
+
+  it("hides the eval badge when last_eval_recall_at_5 is null", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({ indexed_statutes: 41, jurisdictions: ["California"] })
+    );
+    render(<DatasetStatus />);
+    await waitFor(() => screen.getByText(/statutes indexed/i));
+    expect(screen.queryByText(/recall@5/i)).not.toBeInTheDocument();
   });
 
   it("shows 'Backend offline' error when the fetch fails", async () => {
@@ -66,19 +93,5 @@ describe("DatasetStatus", () => {
     render(<DatasetStatus />);
     await waitFor(() => screen.getByText(/backend offline/i));
     expect(screen.queryByText(/statutes indexed/i)).not.toBeInTheDocument();
-  });
-
-  it("renders recall@5 when present in the status payload", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue(
-      makeStatus({
-        indexed_statutes: 41,
-        jurisdictions: ["California"],
-        last_eval_recall_at_5: 0.87,
-      })
-    );
-    render(<DatasetStatus />);
-    await waitFor(() => {
-      expect(screen.getByText(/recall@5 87%/i)).toBeInTheDocument();
-    });
   });
 });
