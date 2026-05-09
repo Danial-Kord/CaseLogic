@@ -422,7 +422,7 @@ def ingest_ca_vehicle_code_divisions(
                 code_name="VEH",
                 section_number=sec_str,
                 universal_citation=f"Cal. Veh. Code § {sec_str}",
-                subdivision=None,
+                subdivision="",
                 division=parsed.get("division"),
                 chapter=parsed.get("chapter"),
                 statute_text=parsed.get("statute_text"),
