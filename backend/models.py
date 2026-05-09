@@ -1,12 +1,26 @@
-"""ORM models. Phase 2 only fills in `documents`; chunks/metadata/claim_support are
-declared but kept minimal until later phases need them."""
+"""ORM models.
+
+`Document` is the generic web/case-law row used by the existing ingestion pipeline
+(Phase 2 / Organizer extension). `Statute` + `StatuteFactor` are the Phase-1 core:
+one row per vehicle-code section (with its subdivision), plus a many-to-many tag
+table for the 17-factor taxonomy in `backend.extraction.factors`.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 
@@ -31,3 +45,76 @@ class Document(Base):
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Statute(Base):
+    """One row per vehicle-code section (with its subdivision when present).
+
+    `statute_id` is the slug used as the public identifier across the API,
+    Chroma collection, and FTS5 table — e.g. `ca-veh-22350`, `ca-veh-21451-a`.
+    Person 1 (Data Lead) owns slug generation at ingest time.
+    """
+
+    __tablename__ = "statutes"
+    __table_args__ = (
+        UniqueConstraint(
+            "jurisdiction",
+            "code_name",
+            "section_number",
+            "subdivision",
+            name="uq_statutes_jurisdiction_code_section_subdivision",
+        ),
+        Index("ix_statutes_jurisdiction_code", "jurisdiction", "code_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    statute_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(64), index=True)
+    code_name: Mapped[str] = mapped_column(String(128))
+    section_number: Mapped[str] = mapped_column(String(32), index=True)
+    universal_citation: Mapped[str] = mapped_column(String(256), index=True)
+    subdivision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    division: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    chapter: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    statute_text: Mapped[str] = mapped_column(Text)
+    complete_statute: Mapped[str] = mapped_column(Text)
+    official_url: Mapped[str] = mapped_column(String(2048))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    factors: Mapped[list["StatuteFactor"]] = relationship(
+        "StatuteFactor",
+        back_populates="statute",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class StatuteFactor(Base):
+    """Many-to-many tag from a statute to one of the 17 contributing-factor strings.
+
+    `factor` is byte-exact a value from `backend.extraction.factors.FACTORS`.
+    `quote` is the verbatim snippet from the statute that justifies the tag —
+    required for traceability per the hackathon ground rules.
+    """
+
+    __tablename__ = "statute_factors"
+    __table_args__ = (
+        UniqueConstraint(
+            "statute_id",
+            "factor",
+            name="uq_statute_factors_statute_factor",
+        ),
+        Index("ix_statute_factors_factor", "factor"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    statute_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("statutes.statute_id", ondelete="CASCADE"),
+        index=True,
+    )
+    factor: Mapped[str] = mapped_column(String(128))
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    statute: Mapped["Statute"] = relationship("Statute", back_populates="factors")
