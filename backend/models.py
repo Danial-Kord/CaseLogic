@@ -53,6 +53,9 @@ class Statute(Base):
     `statute_id` is the slug used as the public identifier across the API,
     Chroma collection, and FTS5 table — e.g. `ca-veh-22350`, `ca-veh-21451-a`.
     Person 1 (Data Lead) owns slug generation at ingest time.
+
+    `subdivision` stores '' (empty string) for bare sections so the unique
+    constraint works reliably in SQLite (NULL != NULL in unique indexes).
     """
 
     __tablename__ = "statutes"
@@ -71,11 +74,13 @@ class Statute(Base):
     statute_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     jurisdiction: Mapped[str] = mapped_column(String(64), index=True)
     code_name: Mapped[str] = mapped_column(String(128))
-    section_number: Mapped[str] = mapped_column(String(32), index=True)
+    section_number: Mapped[str] = mapped_column(String(64), index=True)
     universal_citation: Mapped[str] = mapped_column(String(256), index=True)
+    # '' for bare sections (e.g. § 22350), '(a)' or '(a)-(b)' for subdivisions
     subdivision: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    division: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    chapter: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # String(512): leginfo division strings run ~100 chars incl. enactment notes
+    division: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    chapter: Mapped[str | None] = mapped_column(String(512), nullable=True)
     statute_text: Mapped[str] = mapped_column(Text)
     complete_statute: Mapped[str] = mapped_column(Text)
     official_url: Mapped[str] = mapped_column(String(2048))
