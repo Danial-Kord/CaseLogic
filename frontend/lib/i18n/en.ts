@@ -50,6 +50,7 @@ export const strings = {
       `${n} result${n !== 1 ? "s" : ""} for "${query}"`,
     leginfoLink: "Open on leginfo →",
     col: {
+      state: "State",
       citation: "Citation",
       section: "Section",
       division: "Division",

@@ -9,6 +9,7 @@ import MatchedViaBadge from "./MatchedViaBadge";
 const TRUNCATE_AT = 280;
 
 type SortKey =
+  | "state"
   | "citation"
   | "section"
   | "division"
@@ -28,6 +29,7 @@ const MATCHED_VIA_ORDER: Record<MatchedVia, number> = {
 // Default direction when a column is first clicked. Score and factor count
 // are most useful descending; everything else reads naturally ascending.
 const DEFAULT_DIR: Record<SortKey, SortDir> = {
+  state: "asc",
   citation: "asc",
   section: "asc",
   division: "asc",
@@ -51,6 +53,8 @@ function shortDivision(d: string | null): string {
 
 function compareHits(a: StatuteHit, b: StatuteHit, key: SortKey): number {
   switch (key) {
+    case "state":
+      return a.jurisdiction.localeCompare(b.jurisdiction);
     case "citation":
       return a.universal_citation.localeCompare(b.universal_citation);
     case "section":
@@ -134,8 +138,9 @@ export default function ResultsPanel({
         {strings.resultsPanel.resultCount(results.length, query)}
       </p>
       <div className="overflow-x-auto rounded border border-brand-border">
-        <table className="w-full min-w-[760px] border-collapse text-sm">
+        <table className="w-full min-w-[820px] border-collapse text-sm">
           <colgroup>
+            <col className="w-[3.5rem]" />
             <col className="w-[14rem]" />
             <col className="w-[5rem]" />
             <col className="w-[5rem]" />
@@ -146,6 +151,13 @@ export default function ResultsPanel({
           </colgroup>
           <thead className="bg-brand-surface text-left text-[11px] uppercase tracking-wide text-brand-muted">
             <tr>
+              <SortableHeader
+                label={cols.state}
+                keyName="state"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onClick={toggleSort}
+              />
               <SortableHeader
                 label={cols.citation}
                 keyName="citation"
@@ -214,26 +226,26 @@ export default function ResultsPanel({
                   }`}
                 >
                   <td className="px-2 py-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        title={
-                          strings.jurisdiction.labels[r.jurisdiction] ??
-                          r.jurisdiction
-                        }
-                        className="flex-shrink-0 rounded bg-brand-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-muted"
-                      >
-                        {r.jurisdiction}
-                      </span>
-                      <a
-                        href={r.official_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={strings.resultsPanel.leginfoLink}
-                        className="block truncate font-mono text-sm font-semibold text-brand-primary hover:underline"
-                      >
-                        {r.universal_citation}
-                      </a>
-                    </div>
+                    <span
+                      title={
+                        strings.jurisdiction.labels[r.jurisdiction] ??
+                        r.jurisdiction
+                      }
+                      className="inline-block rounded bg-brand-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-muted"
+                    >
+                      {r.jurisdiction}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <a
+                      href={r.official_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={strings.resultsPanel.leginfoLink}
+                      className="block truncate font-mono text-sm font-semibold text-brand-primary hover:underline"
+                    >
+                      {r.universal_citation}
+                    </a>
                   </td>
                   <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
                     {r.section_number}
