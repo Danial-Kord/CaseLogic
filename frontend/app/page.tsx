@@ -6,13 +6,23 @@ import { strings } from "@/lib/i18n/en";
 import DatasetStatus from "@/components/DatasetStatus";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatThread from "@/components/ChatThread";
+import ProfileModal from "@/components/ProfileModal";
 import StatuteModal from "@/components/StatuteModal";
 import type {
   ChatDetail,
   ChatMessage,
   ChatSummary,
+  Profile,
   StatuteHit,
 } from "@/lib/types";
+
+const EMPTY_PROFILE: Profile = {
+  name: "",
+  role: "",
+  firm: "",
+  about: "",
+  updated_at: null,
+};
 
 export default function HomePage() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -20,6 +30,8 @@ export default function HomePage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalStatuteId, setModalStatuteId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const refreshChats = useCallback(async () => {
     try {
@@ -32,7 +44,15 @@ export default function HomePage() {
 
   useEffect(() => {
     refreshChats();
+    api.getProfile().then(setProfile).catch(() => {
+      /* keep EMPTY_PROFILE if backend isn't reachable */
+    });
   }, [refreshChats]);
+
+  async function handleSaveProfile(next: Omit<Profile, "updated_at">) {
+    const saved = await api.updateProfile(next);
+    setProfile(saved);
+  }
 
   async function handleNewChat() {
     setError(null);
@@ -142,6 +162,8 @@ export default function HomePage() {
           onSelect={handleSelectChat}
           onNew={handleNewChat}
           onDelete={handleDeleteChat}
+          profile={profile}
+          onEditProfile={() => setProfileOpen(true)}
         />
         <div className="flex flex-col gap-2 overflow-hidden">
           {error && (
@@ -165,6 +187,13 @@ export default function HomePage() {
       <StatuteModal
         statuteId={modalStatuteId}
         onClose={() => setModalStatuteId(null)}
+      />
+
+      <ProfileModal
+        open={profileOpen}
+        profile={profile}
+        onClose={() => setProfileOpen(false)}
+        onSave={handleSaveProfile}
       />
     </div>
   );
