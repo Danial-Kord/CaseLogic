@@ -96,3 +96,54 @@ class StatusResponse(BaseModel):
     last_eval_run_at: Optional[datetime] = None
     last_eval_recall_at_5: Optional[float] = None
     last_eval_citation_recall_at_1: Optional[float] = None
+
+
+# --- Chat sessions ----------------------------------------------------------
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    hits: list[StatuteHitOut] = Field(default_factory=list)
+    created_at: datetime
+
+
+class ChatSummary(BaseModel):
+    """Compact row for the chat list sidebar — no message bodies."""
+
+    chat_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class ChatOut(BaseModel):
+    """Full chat payload — used when the user opens a specific chat."""
+
+    chat_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatMessageOut] = Field(default_factory=list)
+
+
+class ChatListResponse(BaseModel):
+    chats: list[ChatSummary]
+
+
+class ChatCreateRequest(BaseModel):
+    title: Optional[str] = None
+
+
+class SendMessageRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2048)
+    factor: Optional[str] = None
+    top_k: int = Field(10, ge=1, le=50)
+
+
+class SendMessageResponse(BaseModel):
+    user_message: ChatMessageOut
+    assistant_message: ChatMessageOut
+    chat_title: str

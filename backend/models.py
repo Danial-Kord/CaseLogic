@@ -123,3 +123,49 @@ class StatuteFactor(Base):
     quote: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     statute: Mapped["Statute"] = relationship("Statute", back_populates="factors")
+
+
+class Chat(Base):
+    """A persisted chat session. Multi-chat is the user-facing feature: the
+    sidebar lists all chats by `updated_at desc` so the most-recent ones are
+    always at the top."""
+
+    __tablename__ = "chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(256), default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        "ChatMessage",
+        back_populates="chat",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.id",
+        lazy="selectin",
+    )
+
+
+class ChatMessage(Base):
+    """One message in a Chat. `hits_json` (assistant only) stores the
+    serialized list of StatuteHitOut dicts that were retrieved for the
+    answer, so the client can re-render the result table on chat reload
+    without re-running retrieval."""
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("chats.chat_id", ondelete="CASCADE"),
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(16))  # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text)
+    hits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    chat: Mapped["Chat"] = relationship("Chat", back_populates="messages")

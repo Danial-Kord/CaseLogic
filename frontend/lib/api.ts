@@ -1,8 +1,12 @@
 import type {
+  ChatDetail,
+  ChatListResponse,
   FactorsResponse,
   MatchedVia,
   SearchRequest,
   SearchResponse,
+  SendMessageRequest,
+  SendMessageResponse,
   StatusResponse,
   StatuteDetail,
   StatuteHit,
@@ -246,6 +250,102 @@ class ApiClient {
     if (!res.ok) {
       throw new Error(`Status check failed: ${res.status}`);
     }
+    return res.json();
+  }
+
+  // ----- Chat sessions (multi-chat) ---------------------------------------
+
+  async listChats(): Promise<ChatListResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(100);
+      return { chats: [] };
+    }
+    const res = await fetch(`${this.baseUrl}/chats`);
+    if (!res.ok) throw new Error(`List chats failed: ${res.status}`);
+    return res.json();
+  }
+
+  async createChat(title?: string): Promise<ChatDetail> {
+    if (this.mockMode) {
+      await this.simulateLatency(100);
+      const now = new Date().toISOString();
+      return {
+        chat_id: Math.random().toString(36).slice(2, 14),
+        title: title ?? "New chat",
+        created_at: now,
+        updated_at: now,
+        messages: [],
+      };
+    }
+    const res = await fetch(`${this.baseUrl}/chats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(title ? { title } : {}),
+    });
+    if (!res.ok) throw new Error(`Create chat failed: ${res.status}`);
+    return res.json();
+  }
+
+  async getChat(chatId: string): Promise<ChatDetail> {
+    if (this.mockMode) throw new Error("Mock mode: getChat not supported");
+    const res = await fetch(
+      `${this.baseUrl}/chats/${encodeURIComponent(chatId)}`,
+    );
+    if (res.status === 404) throw new Error("Chat not found");
+    if (!res.ok) throw new Error(`Get chat failed: ${res.status}`);
+    return res.json();
+  }
+
+  async deleteChat(chatId: string): Promise<void> {
+    if (this.mockMode) return;
+    const res = await fetch(
+      `${this.baseUrl}/chats/${encodeURIComponent(chatId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Delete chat failed: ${res.status}`);
+    }
+  }
+
+  async sendChatMessage(
+    chatId: string,
+    request: SendMessageRequest,
+  ): Promise<SendMessageResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(800);
+      const search = await this.search({
+        query: request.content,
+        factor: request.factor,
+        top_k: request.top_k ?? 10,
+      });
+      const now = new Date().toISOString();
+      return {
+        user_message: {
+          id: -1,
+          role: "user",
+          content: request.content,
+          hits: [],
+          created_at: now,
+        },
+        assistant_message: {
+          id: -2,
+          role: "assistant",
+          content: await this.chat(request.content),
+          hits: search.results,
+          created_at: now,
+        },
+        chat_title: request.content.slice(0, 60),
+      };
+    }
+    const res = await fetch(
+      `${this.baseUrl}/chats/${encodeURIComponent(chatId)}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    if (!res.ok) throw new Error(`Send message failed: ${res.status}`);
     return res.json();
   }
 
