@@ -64,14 +64,28 @@ class StatuteSearchRequest(BaseModel):
         None,
         description="One of the 17 factors from `GET /factors`. Byte-exact match.",
     )
+    jurisdiction: Optional[str] = Field(
+        None,
+        description="Limit results to one jurisdiction: CA, FL, NY, or WA.",
+    )
     top_k: int = Field(10, ge=1, le=50)
 
 
 class StatuteSearchResponse(BaseModel):
     query: str
     factor: Optional[str] = None
+    jurisdiction: Optional[str] = None
     top_k: int
     results: list[StatuteHitOut]
+
+
+class JurisdictionCount(BaseModel):
+    jurisdiction: str
+    statute_count: int
+
+
+class JurisdictionsResponse(BaseModel):
+    jurisdictions: list[JurisdictionCount]
 
 
 class FactorCount(BaseModel):

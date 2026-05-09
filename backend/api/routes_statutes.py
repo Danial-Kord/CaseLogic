@@ -21,6 +21,8 @@ from sqlalchemy.orm import selectinload
 from backend.api.schemas import (
     FactorCount,
     FactorsResponse,
+    JurisdictionCount,
+    JurisdictionsResponse,
     StatuteHitOut,
     StatuteOut,
     StatuteSearchRequest,
@@ -94,12 +96,36 @@ def search_statutes(payload: StatuteSearchRequest) -> StatuteSearchResponse:
             ),
         )
 
-    hits = retrieve(query=payload.query, factor=payload.factor, top_k=payload.top_k)
+    hits = retrieve(
+        query=payload.query,
+        factor=payload.factor,
+        jurisdiction=payload.jurisdiction,
+        top_k=payload.top_k,
+    )
     return StatuteSearchResponse(
         query=payload.query,
         factor=payload.factor,
+        jurisdiction=payload.jurisdiction,
         top_k=payload.top_k,
         results=[_hit_to_out(h) for h in hits],
+    )
+
+
+@router.get("/jurisdictions", response_model=JurisdictionsResponse)
+def list_jurisdictions() -> JurisdictionsResponse:
+    """Count of statutes per jurisdiction. Sorted by jurisdiction code."""
+    with get_session() as session:
+        rows = session.execute(
+            select(
+                Statute.jurisdiction,
+                func.count(Statute.id),
+            ).group_by(Statute.jurisdiction).order_by(Statute.jurisdiction)
+        ).all()
+    return JurisdictionsResponse(
+        jurisdictions=[
+            JurisdictionCount(jurisdiction=jur, statute_count=int(cnt))
+            for jur, cnt in rows
+        ]
     )
 
 
