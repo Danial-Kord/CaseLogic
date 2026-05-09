@@ -123,3 +123,70 @@ class StatuteFactor(Base):
     quote: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     statute: Mapped["Statute"] = relationship("Statute", back_populates="factors")
+
+
+class ChatSession(Base):
+    """One conversation thread. `session_id` is a UUID string used as the
+    public identifier in the API; `id` stays internal.
+
+    `title` is optional and is auto-generated from the first user message
+    after the first assistant turn lands.
+    """
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        "ChatMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ChatMessage.turn_index",
+    )
+
+
+class ChatMessage(Base):
+    """One message inside a chat session.
+
+    `content_json` stores the full Anthropic message-block list as JSON
+    (`[{type:"text",...}, {type:"tool_use",...}, {type:"tool_result",...}]`)
+    so replaying the conversation back into the LLM is lossless.
+
+    `role` is one of:
+      - 'user'         — user-authored prompt
+      - 'assistant'    — Claude's response (may contain text + tool_use blocks)
+      - 'tool_result'  — our tool execution feedback (sent as role='user' in
+                         the Anthropic API but tagged separately here so the
+                         frontend can hide them or render them differently).
+    """
+
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_session_turn", "session_id_fk", "turn_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id_fk: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("chat_sessions.session_id", ondelete="CASCADE"),
+        index=True,
+    )
+    turn_index: Mapped[int] = mapped_column(Integer)
+    role: Mapped[str] = mapped_column(String(16))
+    content_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    session: Mapped["ChatSession"] = relationship(
+        "ChatSession", back_populates="messages"
+    )
