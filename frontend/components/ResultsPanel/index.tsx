@@ -214,15 +214,26 @@ export default function ResultsPanel({
                   }`}
                 >
                   <td className="px-2 py-2">
-                    <a
-                      href={r.official_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={strings.resultsPanel.leginfoLink}
-                      className="block truncate font-mono text-sm font-semibold text-brand-primary hover:underline"
-                    >
-                      {r.universal_citation}
-                    </a>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        title={
+                          strings.jurisdiction.labels[r.jurisdiction] ??
+                          r.jurisdiction
+                        }
+                        className="flex-shrink-0 rounded bg-brand-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-muted"
+                      >
+                        {r.jurisdiction}
+                      </span>
+                      <a
+                        href={r.official_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={strings.resultsPanel.leginfoLink}
+                        className="block truncate font-mono text-sm font-semibold text-brand-primary hover:underline"
+                      >
+                        {r.universal_citation}
+                      </a>
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
                     {r.section_number}
