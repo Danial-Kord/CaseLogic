@@ -39,7 +39,8 @@ def healthz() -> dict:
 
 # Routers are imported lazily after `app` exists so that any import-time failure
 # in a route module (missing env, etc.) surfaces with the right traceback.
-from backend.api import routes_ingest, routes_status  # noqa: E402
+from backend.api import routes_ingest, routes_statutes, routes_status  # noqa: E402
 
 app.include_router(routes_status.router)
 app.include_router(routes_ingest.router)
+app.include_router(routes_statutes.router)
