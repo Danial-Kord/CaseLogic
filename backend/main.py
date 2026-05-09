@@ -45,6 +45,7 @@ def healthz() -> dict:
 # in a route module (missing env, etc.) surfaces with the right traceback.
 from backend.api import (  # noqa: E402
     routes_chat,
+    routes_chats,
     routes_ingest,
     routes_statutes,
     routes_status,
@@ -54,3 +55,4 @@ app.include_router(routes_status.router)
 app.include_router(routes_ingest.router)
 app.include_router(routes_statutes.router)
 app.include_router(routes_chat.router)
+app.include_router(routes_chats.router)

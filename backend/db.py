@@ -30,6 +30,37 @@ def init_db() -> None:
     from backend import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _apply_lightweight_migrations()
+
+
+def _apply_lightweight_migrations() -> None:
+    """Hand-rolled, idempotent migrations for SQLite dev databases.
+
+    We don't run Alembic in this repo (hackathon scope), so when we add a
+    column to an existing model we have to upgrade live databases here.
+    Each migration must be safe to re-run — we swallow the OperationalError
+    that SQLite raises when the column already exists.
+    """
+
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    if not _settings.database_url.startswith("sqlite"):
+        return
+
+    statements = [
+        # 2026-05-09: chat_messages.hits_json — frontend-renderable hits per
+        # final assistant message. Older rows stay NULL.
+        "ALTER TABLE chat_messages ADD COLUMN hits_json TEXT",
+    ]
+
+    with engine.begin() as conn:
+        for sql in statements:
+            try:
+                conn.execute(text(sql))
+            except OperationalError:
+                # Column already exists, or table doesn't yet — both fine.
+                pass
 
 
 @contextmanager

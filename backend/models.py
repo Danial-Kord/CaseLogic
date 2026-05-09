@@ -161,6 +161,14 @@ class ChatMessage(Base):
     (`[{type:"text",...}, {type:"tool_use",...}, {type:"tool_result",...}]`)
     so replaying the conversation back into the LLM is lossless.
 
+    `hits_json` is set only on the *final* assistant message of a turn (the
+    one carrying the user-visible answer text). It stores a JSON list of
+    enriched `StatuteHit` records — full statute rows joined from the
+    `statutes` table — so the frontend can re-render result cards when a
+    chat is reloaded without recomputing retrieval. Earlier assistant rows
+    in the same turn (the ones whose only purpose was to issue tool_use
+    blocks) leave this NULL.
+
     `role` is one of:
       - 'user'         — user-authored prompt
       - 'assistant'    — Claude's response (may contain text + tool_use blocks)
@@ -183,6 +191,7 @@ class ChatMessage(Base):
     turn_index: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(String(16))
     content_json: Mapped[str] = mapped_column(Text)
+    hits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
