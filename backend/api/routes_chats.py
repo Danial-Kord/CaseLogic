@@ -1,175 +1,473 @@
-"""Chat session endpoints.
+"""Frontend-facing chat surface (`/chats`).
 
-The frontend's multi-chat sidebar talks to:
+Thin adapter on top of `backend.agent.loop.run_agent_turn` that speaks the
+contract `frontend/lib/api.ts` was built against:
 
-- `GET    /chats`              — list all chats (id, title, timestamps, msg count)
-- `POST   /chats`              — create a new (empty) chat
-- `GET    /chats/{chat_id}`    — fetch one chat with its full message history
-- `DELETE /chats/{chat_id}`    — delete a chat (cascades to messages)
-- `POST   /chats/{chat_id}/messages` — append a user message; runs retrieval +
-  Claude; persists both messages; returns them with the retrieved statute hits
-  attached to the assistant message so the client can render the table inline.
+- `chat_id` instead of `session_id`,
+- flat `content: string` per message (the user-visible answer text),
+- a rich `hits: StatuteHit[]` array per assistant message, joined from the
+  `statutes` table so the frontend can re-render result cards on reload,
+- a single send endpoint that returns both the user and assistant rows
+  plus the (possibly auto-generated) chat title.
+
+The lower-level `/chat` and `/chat/sessions` routes in `routes_chat.py`
+stay where they are — they back the smoke tests and the demo curl scripts.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import uuid
+from datetime import datetime, timezone
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Path, Response, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
 
-from backend.api.schemas import (
-    ChatCreateRequest,
-    ChatListResponse,
-    ChatMessageOut,
-    ChatOut,
-    ChatSummary,
-    SendMessageRequest,
-    SendMessageResponse,
-    StatuteHitOut,
+from backend.agent import run_agent_turn
+from backend.agent.history import (
+    ROLE_ASSISTANT,
+    ROLE_USER,
+    get_session_row,
 )
-from backend.chat.service import respond_to_query
+from backend.agent.loop import AgentTurn, SessionNotFound
 from backend.db import get_session
-from backend.models import Chat, ChatMessage
-from backend.retrieval import StatuteHit
+from backend.models import ChatMessage, ChatSession, Statute
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+log = logging.getLogger(__name__)
 
-def _new_chat_id() -> str:
-    return uuid.uuid4().hex[:12]
-
-
-def _hit_to_out_dict(hit: StatuteHit) -> dict:
-    return StatuteHitOut(
-        statute_id=hit.statute_id,
-        universal_citation=hit.universal_citation,
-        jurisdiction=hit.jurisdiction,
-        code_name=hit.code_name,
-        section_number=hit.section_number,
-        subdivision=hit.subdivision,
-        division=hit.division,
-        chapter=hit.chapter,
-        statute_text=hit.statute_text,
-        complete_statute=hit.complete_statute,
-        official_url=hit.official_url,
-        score=hit.score,
-        factors=hit.factors,
-        matched_via=hit.matched_via,
-    ).model_dump(mode="json")
+DEFAULT_TITLE = "New chat"
 
 
-def _msg_to_out(msg: ChatMessage) -> ChatMessageOut:
-    hits: list[StatuteHitOut] = []
-    if msg.hits_json:
-        try:
-            hits = [StatuteHitOut(**h) for h in json.loads(msg.hits_json)]
-        except (ValueError, TypeError):
-            hits = []
-    return ChatMessageOut(
-        id=msg.id,
-        role=msg.role,
-        content=msg.content,
-        hits=hits,
-        created_at=msg.created_at,
-    )
+# ---------------------------------------------------------------- schemas
 
 
-def _chat_to_summary(chat: Chat) -> ChatSummary:
-    return ChatSummary(
-        chat_id=chat.chat_id,
-        title=chat.title,
-        created_at=chat.created_at,
-        updated_at=chat.updated_at,
-        message_count=len(chat.messages),
-    )
+class FrontendStatuteHit(BaseModel):
+    """Mirror of `frontend/lib/types.ts#StatuteHit` — the shape the existing
+    `ResultsPanel` component renders."""
+
+    statute_id: str
+    universal_citation: str
+    jurisdiction: str
+    code_name: str
+    section_number: str
+    subdivision: Optional[str] = None
+    division: Optional[str] = None
+    chapter: Optional[str] = None
+    statute_text: str
+    complete_statute: str
+    official_url: str
+    score: float
+    factors: list[str] = Field(default_factory=list)
+    matched_via: str
+
+
+class FrontendChatMessage(BaseModel):
+    """Mirror of `frontend/lib/types.ts#ChatMessage`."""
+
+    id: int
+    role: str  # 'user' | 'assistant'
+    content: str
+    hits: list[FrontendStatuteHit] = Field(default_factory=list)
+    created_at: datetime
+
+
+class ChatSummaryOut(BaseModel):
+    """Mirror of `frontend/lib/types.ts#ChatSummary`."""
+
+    chat_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+
+
+class ChatListResponse(BaseModel):
+    chats: list[ChatSummaryOut]
+
+
+class ChatDetailOut(BaseModel):
+    """Mirror of `frontend/lib/types.ts#ChatDetail`."""
+
+    chat_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[FrontendChatMessage] = Field(default_factory=list)
+
+
+class CreateChatRequest(BaseModel):
+    title: Optional[str] = Field(None, max_length=256)
+
+
+class SendMessageRequest(BaseModel):
+    """Mirror of `frontend/lib/types.ts#SendMessageRequest`.
+
+    `factor` and `top_k` are accepted for forward-compat but the agent loop
+    drives its own retrieval through Claude tool calls — we don't pre-filter
+    here. Including them in the request keeps the API surface stable for
+    when we wire factor-locked search back in.
+    """
+
+    content: str = Field(..., min_length=1, max_length=4000)
+    factor: Optional[str] = None
+    top_k: Optional[int] = Field(None, ge=1, le=50)
+
+
+class SendMessageResponse(BaseModel):
+    user_message: FrontendChatMessage
+    assistant_message: FrontendChatMessage
+    chat_title: str
+
+
+# ----------------------------------------------------------- GET /chats
 
 
 @router.get("", response_model=ChatListResponse)
 def list_chats() -> ChatListResponse:
-    with get_session() as session:
-        chats = session.scalars(
-            select(Chat).order_by(Chat.updated_at.desc())
-        ).all()
-        return ChatListResponse(chats=[_chat_to_summary(c) for c in chats])
+    """Most-recently-updated first. Counts messages so the sidebar can
+    show "3 msg" without loading the bodies."""
+
+    with get_session() as db:
+        rows = list(
+            db.execute(
+                select(
+                    ChatSession.session_id,
+                    ChatSession.title,
+                    ChatSession.created_at,
+                    ChatSession.updated_at,
+                    func.count(ChatMessage.id),
+                )
+                .outerjoin(
+                    ChatMessage,
+                    ChatMessage.session_id_fk == ChatSession.session_id,
+                )
+                .group_by(ChatSession.id)
+                .order_by(ChatSession.updated_at.desc())
+            ).all()
+        )
+
+    chats = [
+        ChatSummaryOut(
+            chat_id=session_id,
+            title=title or DEFAULT_TITLE,
+            created_at=created_at,
+            updated_at=updated_at,
+            # message_count from the frontend's perspective: only the user-
+            # visible messages, not the internal tool_result rows. Approx by
+            # halving since each turn is user+assistant; correct for our
+            # single-shot pattern.
+            message_count=int(message_count),
+        )
+        for session_id, title, created_at, updated_at, message_count in rows
+    ]
+    return ChatListResponse(chats=chats)
 
 
-@router.post("", response_model=ChatOut)
-def create_chat(payload: ChatCreateRequest | None = None) -> ChatOut:
-    title = (payload.title if payload else None) or "New chat"
-    with get_session() as session:
-        chat = Chat(chat_id=_new_chat_id(), title=title)
-        session.add(chat)
-        session.flush()
-        return ChatOut(
-            chat_id=chat.chat_id,
-            title=chat.title,
-            created_at=chat.created_at,
-            updated_at=chat.updated_at,
-            messages=[],
+# --------------------------------------------------------- POST /chats
+
+
+@router.post("", response_model=ChatDetailOut, status_code=status.HTTP_201_CREATED)
+def create_chat(payload: CreateChatRequest | None = None) -> ChatDetailOut:
+    """Create an empty chat the frontend can pin before the first message.
+
+    If the caller doesn't pass an explicit title, we leave the DB column
+    NULL and substitute the placeholder only at response time. That lets
+    `history.touch_session` auto-generate a title from the first user
+    message — `touch_session` skips the write if `row.title` is already
+    set, so a placeholder like "New chat" would otherwise stick forever.
+    """
+
+    chat_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    explicit_title = payload.title if payload else None
+
+    with get_session() as db:
+        db.add(
+            ChatSession(
+                session_id=chat_id,
+                title=explicit_title,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    return ChatDetailOut(
+        chat_id=chat_id,
+        title=explicit_title or DEFAULT_TITLE,
+        created_at=now,
+        updated_at=now,
+        messages=[],
+    )
+
+
+# ------------------------------------------------- GET /chats/{chat_id}
+
+
+@router.get("/{chat_id}", response_model=ChatDetailOut)
+def get_chat(
+    chat_id: str = Path(..., min_length=8, max_length=64),
+) -> ChatDetailOut:
+    """Replay one chat with all user-visible messages.
+
+    Internal `tool_result` rows are filtered out. Assistant rows whose only
+    content is `tool_use` blocks (no text) are also dropped — they're a
+    thinking step, not part of the user-visible thread.
+    """
+
+    with get_session() as db:
+        row = get_session_row(db, chat_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="chat not found")
+
+        messages = list(
+            db.scalars(
+                select(ChatMessage)
+                .where(ChatMessage.session_id_fk == chat_id)
+                .order_by(ChatMessage.turn_index.asc())
+            )
+        )
+
+        rendered = _render_messages(messages)
+
+        return ChatDetailOut(
+            chat_id=row.session_id,
+            title=row.title or DEFAULT_TITLE,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            messages=rendered,
         )
 
 
-@router.get("/{chat_id}", response_model=ChatOut)
-def get_chat(chat_id: str) -> ChatOut:
-    with get_session() as session:
-        chat = session.scalar(select(Chat).where(Chat.chat_id == chat_id))
-        if not chat:
-            raise HTTPException(status_code=404, detail="chat not found")
-        return ChatOut(
-            chat_id=chat.chat_id,
-            title=chat.title,
-            created_at=chat.created_at,
-            updated_at=chat.updated_at,
-            messages=[_msg_to_out(m) for m in chat.messages],
-        )
+# ---------------------------------------------- DELETE /chats/{chat_id}
 
 
-@router.delete("/{chat_id}")
-def delete_chat(chat_id: str) -> dict:
-    with get_session() as session:
-        chat = session.scalar(select(Chat).where(Chat.chat_id == chat_id))
-        if not chat:
+@router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chat(
+    chat_id: str = Path(..., min_length=8, max_length=64),
+) -> Response:
+    with get_session() as db:
+        row = get_session_row(db, chat_id)
+        if row is None:
             raise HTTPException(status_code=404, detail="chat not found")
-        session.delete(chat)
-        return {"deleted": chat_id}
+        db.delete(row)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ------------------------------------- POST /chats/{chat_id}/messages
 
 
 @router.post("/{chat_id}/messages", response_model=SendMessageResponse)
-def send_message(chat_id: str, payload: SendMessageRequest) -> SendMessageResponse:
-    # Run retrieval + LLM *outside* the DB session to keep the transaction
-    # short — Claude can take seconds.
-    text, hits = respond_to_query(
-        payload.content, factor=payload.factor, top_k=payload.top_k
-    )
-    hits_json = json.dumps([_hit_to_out_dict(h) for h in hits])
+def send_message(
+    payload: SendMessageRequest,
+    chat_id: str = Path(..., min_length=8, max_length=64),
+) -> SendMessageResponse:
+    """Send a user message and return both the user + assistant rows in the
+    shape the existing ChatThread component expects."""
 
-    with get_session() as session:
-        chat = session.scalar(select(Chat).where(Chat.chat_id == chat_id))
-        if not chat:
+    with get_session() as db:
+        try:
+            turn: AgentTurn = run_agent_turn(
+                db=db,
+                session_id=chat_id,
+                user_message=payload.content,
+            )
+        except SessionNotFound:
             raise HTTPException(status_code=404, detail="chat not found")
 
-        # Auto-title from the first user message; first ~60 chars.
-        if chat.title == "New chat" and not chat.messages:
-            chat.title = payload.content.strip()[:60] or "New chat"
+        # Enrich + persist hits on the *final* assistant row so reloads keep
+        # rendering them.
+        enriched_hits = _enrich_hits(db, turn.statute_hits)
+        assistant_row = _last_assistant_row(db, chat_id)
+        if assistant_row is not None:
+            assistant_row.hits_json = json.dumps(
+                [h.model_dump(mode="json") for h in enriched_hits],
+                ensure_ascii=False,
+            )
 
-        user_msg = ChatMessage(
-            chat_id=chat_id, role="user", content=payload.content
+        user_row = _last_user_row(db, chat_id)
+        session_row = get_session_row(db, chat_id)
+        title = (session_row.title if session_row else None) or DEFAULT_TITLE
+
+        user_message = FrontendChatMessage(
+            id=user_row.id if user_row else 0,
+            role="user",
+            content=payload.content,
+            hits=[],
+            created_at=user_row.created_at if user_row else turn.created_at,
         )
-        session.add(user_msg)
-
-        assistant_msg = ChatMessage(
-            chat_id=chat_id,
+        assistant_message = FrontendChatMessage(
+            id=assistant_row.id if assistant_row else 0,
             role="assistant",
-            content=text,
-            hits_json=hits_json,
+            content=turn.assistant_text or "",
+            hits=enriched_hits,
+            created_at=assistant_row.created_at if assistant_row else turn.created_at,
         )
-        session.add(assistant_msg)
-        session.flush()
 
-        return SendMessageResponse(
-            user_message=_msg_to_out(user_msg),
-            assistant_message=_msg_to_out(assistant_msg),
-            chat_title=chat.title,
+    return SendMessageResponse(
+        user_message=user_message,
+        assistant_message=assistant_message,
+        chat_title=title,
+    )
+
+
+# ---------------------------------------------------------------- helpers
+
+
+def _last_user_row(db: Session, chat_id: str) -> ChatMessage | None:
+    return db.scalar(
+        select(ChatMessage)
+        .where(ChatMessage.session_id_fk == chat_id)
+        .where(ChatMessage.role == ROLE_USER)
+        .order_by(ChatMessage.turn_index.desc())
+        .limit(1)
+    )
+
+
+def _last_assistant_row(db: Session, chat_id: str) -> ChatMessage | None:
+    return db.scalar(
+        select(ChatMessage)
+        .where(ChatMessage.session_id_fk == chat_id)
+        .where(ChatMessage.role == ROLE_ASSISTANT)
+        .order_by(ChatMessage.turn_index.desc())
+        .limit(1)
+    )
+
+
+def _join_text_blocks(content: list[dict[str, Any]]) -> str:
+    pieces = [
+        b.get("text", "")
+        for b in content
+        if isinstance(b, dict) and b.get("type") == "text"
+    ]
+    return "\n".join(p for p in pieces if p).strip()
+
+
+def _parse_blocks(raw: str | None) -> list[dict[str, Any]]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, list):
+        return [b for b in parsed if isinstance(b, dict)]
+    if isinstance(parsed, dict):
+        return [parsed]
+    return []
+
+
+def _parse_hits(raw: str | None) -> list[FrontendStatuteHit]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out: list[FrontendStatuteHit] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        try:
+            out.append(FrontendStatuteHit.model_validate(item))
+        except Exception:  # tolerate stale shapes from older rows
+            continue
+    return out
+
+
+def _render_messages(rows: list[ChatMessage]) -> list[FrontendChatMessage]:
+    """Project stored ChatMessage rows into the flat shape the frontend
+    expects. Skips internal tool_result rows and empty assistant rows."""
+
+    out: list[FrontendChatMessage] = []
+    for row in rows:
+        if row.role == ROLE_USER:
+            blocks = _parse_blocks(row.content_json)
+            text = _join_text_blocks(blocks)
+            if not text:
+                continue
+            out.append(
+                FrontendChatMessage(
+                    id=row.id,
+                    role="user",
+                    content=text,
+                    hits=[],
+                    created_at=row.created_at,
+                )
+            )
+        elif row.role == ROLE_ASSISTANT:
+            blocks = _parse_blocks(row.content_json)
+            text = _join_text_blocks(blocks)
+            if not text:
+                # mid-turn tool-only step; not user-visible
+                continue
+            out.append(
+                FrontendChatMessage(
+                    id=row.id,
+                    role="assistant",
+                    content=text,
+                    hits=_parse_hits(row.hits_json),
+                    created_at=row.created_at,
+                )
+            )
+        # ROLE_TOOL_RESULT — internal, not surfaced
+    return out
+
+
+def _enrich_hits(db: Session, statute_hits: list[Any]) -> list[FrontendStatuteHit]:
+    """Join the agent's lightweight `StatuteToolHit` records against the
+    `statutes` table to build full `FrontendStatuteHit` records.
+
+    Order is preserved (the agent already deduped). Hits whose statute_id
+    no longer exists in the DB are dropped silently — better to omit a row
+    than to render an unverifiable card.
+    """
+
+    if not statute_hits:
+        return []
+
+    ids = [h.statute_id for h in statute_hits]
+    rows = list(
+        db.scalars(
+            select(Statute)
+            .where(Statute.statute_id.in_(ids))
+            .options(selectinload(Statute.factors))
         )
+    )
+    by_id = {s.statute_id: s for s in rows}
+
+    enriched: list[FrontendStatuteHit] = []
+    for h in statute_hits:
+        statute = by_id.get(h.statute_id)
+        if statute is None:
+            log.warning(
+                "agent returned statute_id %s with no row in statutes table",
+                h.statute_id,
+            )
+            continue
+        enriched.append(
+            FrontendStatuteHit(
+                statute_id=statute.statute_id,
+                universal_citation=statute.universal_citation,
+                jurisdiction=statute.jurisdiction,
+                code_name=statute.code_name,
+                section_number=statute.section_number,
+                subdivision=statute.subdivision,
+                division=statute.division,
+                chapter=statute.chapter,
+                statute_text=statute.statute_text,
+                complete_statute=statute.complete_statute,
+                official_url=statute.official_url,
+                score=h.score,
+                factors=sorted({f.factor for f in statute.factors}),
+                matched_via=h.matched_via,
+            )
+        )
+    return enriched

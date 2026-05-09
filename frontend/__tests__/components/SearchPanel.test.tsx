@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 jest.mock("@/lib/api", () => ({
   api: {
     getFactors: jest.fn(),
+    getJurisdictions: jest.fn(),
   },
 }));
 
@@ -16,9 +17,14 @@ const MOCK_FACTORS = {
   ],
 };
 
+const MOCK_JURISDICTIONS = {
+  jurisdictions: [{ jurisdiction: "CA", statute_count: 41 }],
+};
+
 describe("SearchPanel", () => {
   beforeEach(() => {
     jest.mocked(api.getFactors).mockResolvedValue(MOCK_FACTORS);
+    jest.mocked(api.getJurisdictions).mockResolvedValue(MOCK_JURISDICTIONS);
   });
 
   afterEach(() => {
@@ -44,7 +50,7 @@ describe("SearchPanel", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("calls onSearch with flat {query, factor, top_k} on submit", async () => {
+  it("calls onSearch with flat {query, factor, jurisdiction, top_k} on submit", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);
@@ -53,6 +59,7 @@ describe("SearchPanel", () => {
     expect(onSearch).toHaveBeenCalledWith({
       query: "reckless driving",
       factor: undefined,
+      jurisdiction: undefined,
       top_k: 10,
     });
   });
@@ -85,11 +92,14 @@ describe("SearchPanel", () => {
       expect(screen.getByRole("option", { name: /DUI\/DWI/i })).toBeInTheDocument()
     );
     await user.type(screen.getByRole("textbox"), "drunk");
-    await user.selectOptions(screen.getByRole("combobox"), "DUI/DWI");
+    // Two combos render: jurisdiction (first), factor (second).
+    const factorSelect = screen.getAllByRole("combobox")[1];
+    await user.selectOptions(factorSelect, "DUI/DWI");
     await user.click(screen.getByRole("button", { name: /search/i }));
     expect(onSearch).toHaveBeenCalledWith({
       query: "drunk",
       factor: "DUI/DWI",
+      jurisdiction: undefined,
       top_k: 10,
     });
   });
