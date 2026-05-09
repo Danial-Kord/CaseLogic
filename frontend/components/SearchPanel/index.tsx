@@ -38,7 +38,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       <button
         type="submit"
         disabled={isLoading || !query.trim()}
-        className="rounded bg-brand-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
+        className="rounded-full bg-brand-accent px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-accent-hover disabled:opacity-50 disabled:hover:bg-brand-accent"
       >
         {isLoading ? strings.searchPanel.submitting : strings.searchPanel.submit}
       </button>

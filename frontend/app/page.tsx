@@ -65,9 +65,11 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between border-b border-brand-border bg-brand-surface px-6 py-3">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-lg">{strings.app.name}</span>
+      <header className="flex items-center justify-between border-b border-brand-border bg-brand-surface px-6 py-4">
+        <div className="flex items-baseline gap-3">
+          <span className="font-serif text-xl text-brand-primary">
+            {strings.app.name}
+          </span>
           <span className="text-xs text-brand-muted">
             {strings.app.tagline}
           </span>
