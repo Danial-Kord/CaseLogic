@@ -1,9 +1,12 @@
-import SearchPanel from "@/components/SearchPanel";
-import ResultsPanel from "@/components/ResultsPanel";
-import ComparisonTable from "@/components/ComparisonTable";
-import VerificationPanel from "@/components/VerificationPanel";
-import SourceViewer from "@/components/SourceViewer";
+"use client";
+
+import { api } from "@/lib/api";
+import ChatPanel from "@/components/ChatPanel";
 import DatasetStatus from "@/components/DatasetStatus";
+
+async function handleSendMessage(query: string): Promise<string> {
+  return api.chat(query);
+}
 
 export default function HomePage() {
   return (
@@ -12,30 +15,19 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <span className="font-semibold text-lg">CaseLogic</span>
           <span className="text-xs text-brand-muted">
-            Source-grounded PI legal research
+            Source-grounded legal research
           </span>
         </div>
         <DatasetStatus />
       </header>
 
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-[20rem_1fr_22rem] gap-4 p-4">
-        <aside className="space-y-4">
-          <SearchPanel />
-        </aside>
-
-        <section className="space-y-4">
-          <ResultsPanel />
-          <ComparisonTable />
-          <SourceViewer />
-        </section>
-
-        <aside className="space-y-4">
-          <VerificationPanel />
-        </aside>
+      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+        <ChatPanel onSendMessage={handleSendMessage} />
       </main>
 
-      <footer className="border-t border-brand-border bg-brand-surface px-6 py-2 text-xs text-brand-muted">
-        Research prototype. Not legal advice. Results limited to indexed public sources.
+      <footer className="border-t border-brand-border bg-brand-surface px-6 py-2 text-xs text-brand-muted text-center">
+        Research prototype. Not legal advice. Results limited to indexed public
+        sources.
       </footer>
     </div>
   );
