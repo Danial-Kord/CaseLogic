@@ -158,6 +158,47 @@ export default function ResearchPage() {
               }
               case "drafting":
                 return [...prev, { kind: "drafting" }];
+              case "verifying":
+                return [...prev, { kind: "verifying", done: false }];
+              case "verified": {
+                // Patch the most recent unfinished verifying step with the
+                // verdict + a short summary the trace can render. Falls
+                // back to appending a fresh row in the unlikely case the
+                // server emitted "verified" without "verifying".
+                const idx = [...prev]
+                  .reverse()
+                  .findIndex((s) => s.kind === "verifying" && !s.done);
+                const summary =
+                  event.status === "unsupported"
+                    ? strings.verification.trace.unsupportedSummary(
+                        event.unsupported,
+                      )
+                    : event.status === "clean"
+                      ? strings.verification.trace.cleanSummary
+                      : strings.verification.trace.skippedSummary;
+                if (idx === -1) {
+                  return [
+                    ...prev,
+                    {
+                      kind: "verifying",
+                      done: true,
+                      status: event.status,
+                      summary,
+                    },
+                  ];
+                }
+                const realIdx = prev.length - 1 - idx;
+                const next = prev.slice();
+                const target = next[realIdx];
+                if (target.kind !== "verifying") return prev;
+                next[realIdx] = {
+                  ...target,
+                  done: true,
+                  status: event.status,
+                  summary,
+                };
+                return next;
+              }
               case "final":
               case "error":
                 return prev;

@@ -71,12 +71,15 @@ function Add-Card {
         [int]$fillR,
         [int]$fillG,
         [int]$fillB,
+        [int]$lineR = 51,
+        [int]$lineG = 65,
+        [int]$lineB = 85,
         [double]$lineWeight = 1.0
     )
 
     $shape = $slide.Shapes.AddShape(5, $left, $top, $width, $height)
     Set-Fill $shape $fillR $fillG $fillB
-    Set-Line $shape 71 85 105 $lineWeight
+    Set-Line $shape $lineR $lineG $lineB $lineWeight
     return $shape
 }
 
@@ -87,46 +90,24 @@ function Add-RuleLine {
     return $line
 }
 
-function Add-TitleFrame {
-    param($slide, [string]$title, [string]$eyebrow = "")
+function Add-Svg {
+    param(
+        $slide,
+        [string]$path,
+        [double]$left,
+        [double]$top,
+        [double]$width,
+        [double]$height
+    )
 
-    $null = $slide.Shapes.AddShape(1, 0, 0, 960, 540)
-    Set-Fill $slide.Shapes.Item($slide.Shapes.Count) 15 23 42
-    Hide-Line $slide.Shapes.Item($slide.Shapes.Count)
-
-    $accent = $slide.Shapes.AddShape(1, 44, 34, 112, 8)
-    Set-Fill $accent 45 212 191
-    Hide-Line $accent
-
-    if ($eyebrow) {
-        $eyebrowShape = Add-TextBox -slide $slide -left 44 -top 46 -width 260 -height 24 `
-            -text $eyebrow -fontName "Aptos" -fontSize 11 -r 148 -g 163 -b 184
-        $eyebrowShape.TextFrame.TextRange.Font.Bold = -1
-    }
-
-    $titleShape = Add-TextBox -slide $slide -left 44 -top 70 -width 760 -height 60 `
-        -text $title -fontName "Aptos Display" -fontSize 28 -r 248 -g 250 -b 252 -bold $true
-
-    $rule = Add-RuleLine -slide $slide -x1 44 -y1 132 -x2 916 -y2 132 -r 51 -g 65 -b 85
-}
-
-function Add-Note {
-    param($slide, [string]$text)
-    try {
-        $notesShape = $slide.NotesPage.Shapes.Placeholders.Item(2)
-        $notesShape.TextFrame.TextRange.Text = $text
-        $notesShape.TextFrame.TextRange.Font.Name = "Aptos"
-        $notesShape.TextFrame.TextRange.Font.Size = 12
-    } catch {
-        # Notes are helpful but non-critical.
-    }
+    return $slide.Shapes.AddPicture($path, 0, -1, $left, $top, $width, $height)
 }
 
 function Add-Anim($slide, $shape, [int]$trigger = 1) {
     try {
         $null = $slide.TimeLine.MainSequence.AddEffect($shape, 1, 0, $trigger)
     } catch {
-        # Keep generation resilient even if one animation binding fails.
+        # Keep generation resilient if one effect fails to bind.
     }
 }
 
@@ -147,396 +128,333 @@ function Add-AnimSet($slide, $shapes, [int]$firstTrigger = 1) {
     }
 }
 
-$outputPath = Join-Path $PSScriptRoot "CaseLogic_7min_Presentation.pptx"
+function Add-Note {
+    param($slide, [string]$text)
+    try {
+        $notesShape = $slide.NotesPage.Shapes.Placeholders.Item(2)
+        $notesShape.TextFrame.TextRange.Text = $text
+        $notesShape.TextFrame.TextRange.Font.Name = "Aptos"
+        $notesShape.TextFrame.TextRange.Font.Size = 12
+    } catch {
+        # Notes are helpful but non-critical.
+    }
+}
+
+function Add-DarkBackground($slide) {
+    $bg = $slide.Shapes.AddShape(1, 0, 0, 960, 540)
+    Set-Fill $bg 15 23 42
+    Hide-Line $bg
+    return $bg
+}
+
+function Add-SectionHeader($slide, [string]$eyebrow, [string]$title) {
+    $eyebrowShape = Add-TextBox -slide $slide -left 52 -top 30 -width 180 -height 20 `
+        -text $eyebrow -fontName "Aptos" -fontSize 10 -r 148 -g 163 -b 184 -bold $true
+    $titleShape = Add-TextBox -slide $slide -left 52 -top 48 -width 520 -height 34 `
+        -text $title -fontName "Aptos Display" -fontSize 22 -r 248 -g 250 -b 252 -bold $true
+    $rule = Add-RuleLine -slide $slide -x1 52 -y1 92 -x2 908 -y2 92 -r 51 -g 65 -b 85
+    return @($eyebrowShape, $titleShape, $rule)
+}
+
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$assetsDir = Join-Path $scriptRoot "presentation_assets"
+$outputPath = Join-Path $scriptRoot "CaseLogic_7min_Presentation.pptx"
+
+$heroSvg = Join-Path $assetsDir "hero_orbit.svg"
+$pipelineSvg = Join-Path $assetsDir "pipeline_flow.svg"
+$verifierSvg = Join-Path $assetsDir "verifier_badge.svg"
+$chatSvg = Join-Path $assetsDir "chat_surface.svg"
+$proofSvg = Join-Path $assetsDir "proof_signal.svg"
+
 $pp = $null
+$presentation = $null
 
 try {
     $pp = New-Object -ComObject PowerPoint.Application
     $pp.Visible = -1
 
-    $null = $pp.Presentations.Add($true)
-    $presentation = $pp.ActivePresentation
+    $presentation = $pp.Presentations.Add($true)
+
     try {
         $presentation.PageSetup.SlideWidth = 960
         $presentation.PageSetup.SlideHeight = 540
     } catch {
-        # Some Office automation contexts expose a reduced PageSetup surface.
-        # The deck still generates correctly using the default widescreen size.
+        # Some Office automation contexts don't expose these setters.
     }
 
     # ------------------------------------------------------------------ slide 1
     $slide = $presentation.Slides.Add(1, 12)
-    Add-TitleFrame -slide $slide -title "CaseLogic" -eyebrow "7-MINUTE IMPLEMENTATION REVIEW"
+    Add-DarkBackground $slide | Out-Null
 
-    $hero = Add-TextBox -slide $slide -left 44 -top 160 -width 520 -height 110 `
-        -text "Source-grounded vehicle-law research, built around retrieval before reasoning." `
-        -fontName "Aptos Display" -fontSize 24 -r 226 -g 232 -b 240 -bold $true
-    Add-Anim $slide $hero
+    $accent = $slide.Shapes.AddShape(1, 56, 68, 100, 8)
+    Set-Fill $accent 45 212 191
+    Hide-Line $accent
 
-    $sub = Add-TextBox -slide $slide -left 44 -top 270 -width 520 -height 78 `
-        -text "This deck is based on the implemented code paths, passing smoke tests, and the repo walkthrough -- not on unfinished roadmap claims." `
-        -fontName "Aptos" -fontSize 15 -r 148 -g 163 -b 184
-    Add-Anim $slide $sub
+    $title = Add-TextBox -slide $slide -left 56 -top 112 -width 360 -height 60 `
+        -text "CaseLogic" -fontName "Aptos Display" -fontSize 30 -r 248 -g 250 -b 252 -bold $true
+    $subtitle = Add-TextBox -slide $slide -left 56 -top 178 -width 360 -height 44 `
+        -text "Retrieval-first legal research." -fontName "Aptos Display" -fontSize 20 -r 203 -g 213 -b 225
+    $kicker = Add-TextBox -slide $slide -left 56 -top 238 -width 400 -height 52 `
+        -text "Newest repo highlight: deterministic citation and quote verification on chat answers." `
+        -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184
+    $foot = Add-TextBox -slide $slide -left 56 -top 434 -width 360 -height 22 `
+        -text "Implemented features only. No roadmap inflation." -fontName "Aptos" -fontSize 11 -r 100 -g 116 -b 139
+    $hero = Add-Svg -slide $slide -path $heroSvg -left 526 -top 78 -width 330 -height 330
 
-    $chip1 = Add-Card -slide $slide -left 44 -top 380 -width 170 -height 42 -fillR 30 -fillG 41 -fillB 59
-    $chip1Text = Add-TextBox -slide $slide -left 52 -top 389 -width 154 -height 24 -text "Hybrid retrieval" -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252 -bold $true
-    Add-AnimSet $slide @($chip1, $chip1Text)
-
-    $chip2 = Add-Card -slide $slide -left 226 -top 380 -width 170 -height 42 -fillR 30 -fillG 41 -fillB 59
-    $chip2Text = Add-TextBox -slide $slide -left 234 -top 389 -width 154 -height 24 -text "Grounded chat agent" -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252 -bold $true
-    Add-AnimSet $slide @($chip2, $chip2Text)
-
-    $chip3 = Add-Card -slide $slide -left 408 -top 380 -width 170 -height 42 -fillR 30 -fillG 41 -fillB 59
-    $chip3Text = Add-TextBox -slide $slide -left 416 -top 389 -width 154 -height 24 -text "Inspectable sources" -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252 -bold $true
-    Add-AnimSet $slide @($chip3, $chip3Text)
-
-    $panel = Add-Card -slide $slide -left 620 -top 154 -width 290 -height 280 -fillR 18 -fillG 30 -fillB 54
-    $panel.Line.ForeColor.RGB = Get-Rgb 45 212 191
-    $panel.Line.Weight = 1.5
-    $panelTitle = Add-TextBox -slide $slide -left 644 -top 178 -width 240 -height 32 `
-        -text "Implemented anchors" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
-    $panelBody = Add-TextBox -slide $slide -left 644 -top 220 -width 240 -height 188 `
-        -text "backend/main.py mounts status, ingest, statutes, chat, and chats.`r`n`r`nHybrid retrieval combines citation parsing, FTS5, Chroma, and RRF.`r`n`r`nThe frontend now uses a persistent chat workflow with inline statute cards and a source modal." `
-        -fontName "Aptos" -fontSize 14 -r 203 -g 213 -b 225
-    Add-AnimSet $slide @($panel, $panelTitle, $panelBody)
+    Add-AnimSet $slide @($title, $subtitle)
+    Add-AnimSet $slide @($kicker)
+    Add-AnimSet $slide @($hero, $accent, $foot)
 
     Add-Note $slide @"
 0:00-0:40
-Open by framing this as an implementation review, not a speculative roadmap.
-The story: CaseLogic is trying to make vehicle-law research trustworthy by forcing retrieval before answer generation.
-Call out the three themes on screen: hybrid retrieval, grounded chat, inspectable sources.
+Open very simply.
+CaseLogic is a retrieval-first legal research prototype. The important update since the earlier deck is that the repo now has a real deterministic verification layer for citations and verbatim quotes in chat answers.
+This presentation is intentionally grounded in implemented code paths, not planned features.
 "@
 
     # ------------------------------------------------------------------ slide 2
     $slide = $presentation.Slides.Add(2, 12)
-    Add-TitleFrame -slide $slide -title "Why This Prototype Exists" -eyebrow "PROBLEM"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "PRODUCT LOOP" "One boring, trustworthy loop"
+    Add-AnimSet $slide $header
 
-    $left = Add-Card -slide $slide -left 44 -top 166 -width 400 -height 280 -fillR 30 -fillG 41 -fillB 59
-    $leftTitle = Add-TextBox -slide $slide -left 68 -top 190 -width 220 -height 28 -text "The research pain" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
-    $leftBody = Add-TextBox -slide $slide -left 68 -top 228 -width 332 -height 180 `
-        -text "- Statute lookup is split across official sites and search habits.`r`n`r`n- Generic chatbots sound confident even when they cannot show the source.`r`n`r`n- Attorneys need exact language, not just summaries, especially for fault and traffic-rule questions." `
-        -fontName "Aptos" -fontSize 16 -r 226 -g 232 -b 240
-    Add-AnimSet $slide @($left, $leftTitle, $leftBody)
+    $pipeline = Add-Svg -slide $slide -path $pipelineSvg -left 96 -top 132 -width 768 -height 256
 
-    $right = Add-Card -slide $slide -left 476 -top 166 -width 434 -height 280 -fillR 18 -fillG 30 -fillB 54
-    $rightTitle = Add-TextBox -slide $slide -left 500 -top 190 -width 290 -height 28 -text "The design response" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
-    $rightBody = Add-TextBox -slide $slide -left 500 -top 228 -width 364 -height 180 `
-        -text "- Retrieve first.`r`n`r`n- Attach citations to factual claims.`r`n`r`n- Let the user open the full statute from the conversation.`r`n`r`n- Prefer authoritative domains when the agent has to leave the local corpus." `
-        -fontName "Aptos" -fontSize 16 -r 226 -g 232 -b 240
-    Add-AnimSet $slide @($right, $rightTitle, $rightBody)
+    $chip1 = Add-Card -slide $slide -left 92 -top 406 -width 170 -height 52 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.4
+    $chip1Text = Add-TextBox -slide $slide -left 106 -top 423 -width 142 -height 20 -text "ingest + cache" -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
 
-    $footerBand = $slide.Shapes.AddShape(1, 44, 462, 866, 36)
-    Set-Fill $footerBand 13 148 136
-    Hide-Line $footerBand
-    $footerText = Add-TextBox -slide $slide -left 56 -top 468 -width 842 -height 22 `
-        -text "Trust comes from visible source text, not from a polished answer alone." `
-        -fontName "Aptos" -fontSize 15 -r 240 -g 253 -b 250 -bold $true -paragraphAlign 2
-    Add-AnimSet $slide @($footerBand, $footerText)
+    $chip2 = Add-Card -slide $slide -left 292 -top 406 -width 170 -height 52 -fillR 17 -fillG 24 -fillB 39 -lineR 96 -lineG 165 -lineB 250 -lineWeight 1.4
+    $chip2Text = Add-TextBox -slide $slide -left 306 -top 423 -width 142 -height 20 -text "retrieve first" -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+
+    $chip3 = Add-Card -slide $slide -left 492 -top 406 -width 170 -height 52 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.4
+    $chip3Text = Add-TextBox -slide $slide -left 506 -top 423 -width 142 -height 20 -text "draft answer" -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+
+    $chip4 = Add-Card -slide $slide -left 692 -top 406 -width 170 -height 52 -fillR 17 -fillG 24 -fillB 39 -lineR 244 -lineG 114 -lineB 182 -lineWeight 1.4
+    $chip4Text = Add-TextBox -slide $slide -left 706 -top 423 -width 142 -height 20 -text "verify + persist" -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+
+    Add-AnimSet $slide @($pipeline)
+    Add-AnimSet $slide @($chip1, $chip1Text)
+    Add-AnimSet $slide @($chip2, $chip2Text)
+    Add-AnimSet $slide @($chip3, $chip3Text)
+    Add-AnimSet $slide @($chip4, $chip4Text)
 
     Add-Note $slide @"
 0:40-1:20
-Explain the actual wedge this product targets.
-We are not trying to replace legal reasoning with a generic LLM.
-We are trying to compress the time from question to verified statute text.
+This is the entire product philosophy in one slide.
+Ingest authoritative sources, retrieve before answering, let Claude draft on retrieved evidence, then verify and persist what happened.
+The loop is intentionally conservative. It values traceability over flashy reasoning.
 "@
 
     # ------------------------------------------------------------------ slide 3
     $slide = $presentation.Slides.Add(3, 12)
-    Add-TitleFrame -slide $slide -title "What Is Implemented Today" -eyebrow "CAPABILITIES"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "NEWEST REPO FEATURES" "What changed beyond plain search"
+    Add-AnimSet $slide $header
 
-    $cards = @(
-        @{ L = 44;  T = 164; W = 264; H = 132; Title = "Ingestion CLI"; Body = "CA, FL, NY, and WA ingestion entrypoints exist. CA has a real adapter, HTML parser, caching, and persistence path."; Accent = @(45,212,191) },
-        @{ L = 326; T = 164; W = 264; H = 132; Title = "Storage layer"; Body = "SQLite models cover statutes, factor tags, generic web documents, chat sessions, and chat messages."; Accent = @(245,158,11) },
-        @{ L = 608; T = 164; W = 302; H = 132; Title = "Hybrid retrieval"; Body = "Citation fast-path plus FTS5 keyword search, Chroma vector search, and reciprocal-rank fusion."; Accent = @(96,165,250) },
-        @{ L = 44;  T = 316; W = 408; H = 132; Title = "Grounded chat agent"; Body = "Anthropic tool-use loop calls search_statutes, get_statute, and a domain-whitelisted web_search tool before answering."; Accent = @(244,114,182) },
-        @{ L = 470; T = 316; W = 440; H = 132; Title = "Frontend experience"; Body = "The Next.js app now centers on persistent chats, inline result tables, and a statute modal for full source inspection."; Accent = @(251,146,60) }
-    )
+    $verifier = Add-Svg -slide $slide -path $verifierSvg -left 78 -top 124 -width 286 -height 286
+    Add-AnimSet $slide @($verifier)
 
-    foreach ($cardSpec in $cards) {
-        $card = Add-Card -slide $slide -left $cardSpec.L -top $cardSpec.T -width $cardSpec.W -height $cardSpec.H -fillR 30 -fillG 41 -fillB 59
-        $card.Line.ForeColor.RGB = Get-Rgb $cardSpec.Accent[0] $cardSpec.Accent[1] $cardSpec.Accent[2]
-        $card.Line.Weight = 1.5
-        $title = Add-TextBox -slide $slide -left ($cardSpec.L + 18) -top ($cardSpec.T + 18) -width ($cardSpec.W - 36) -height 26 `
-            -text $cardSpec.Title -fontName "Aptos Display" -fontSize 17 -r 248 -g 250 -b 252 -bold $true
+    $card1 = Add-Card -slide $slide -left 420 -top 124 -width 460 -height 62 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.4
+    $card1Title = Add-TextBox -slide $slide -left 442 -top 138 -width 210 -height 18 -text "citation + quote verifier" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true
+    $card1Body = Add-TextBox -slide $slide -left 442 -top 156 -width 400 -height 16 -text "Deterministic audit in backend/verification." -fontName "Aptos" -fontSize 12 -r 148 -g 163 -b 184
 
-        $body = Add-TextBox -slide $slide -left ($cardSpec.L + 18) -top ($cardSpec.T + 50) -width ($cardSpec.W - 36) -height ($cardSpec.H - 58) `
-            -text $cardSpec.Body -fontName "Aptos" -fontSize 14 -r 203 -g 213 -b 225
-        Add-AnimSet $slide @($card, $title, $body)
-    }
+    $card2 = Add-Card -slide $slide -left 420 -top 204 -width 460 -height 62 -fillR 17 -fillG 24 -fillB 39 -lineR 96 -lineG 165 -lineB 250 -lineWeight 1.4
+    $card2Title = Add-TextBox -slide $slide -left 442 -top 218 -width 210 -height 18 -text "live SSE thinking trace" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true
+    $card2Body = Add-TextBox -slide $slide -left 442 -top 236 -width 400 -height 16 -text "The chat surface now streams tool progress, not just final text." -fontName "Aptos" -fontSize 12 -r 148 -g 163 -b 184
 
-    $honesty = Add-TextBox -slide $slide -left 44 -top 468 -width 866 -height 26 `
-        -text "Important honesty: OpenClaw manifest files are still placeholders. The real working agent currently lives under backend/agent." `
-        -fontName "Aptos" -fontSize 13 -r 148 -g 163 -b 184
-    Add-Anim $slide $honesty
+    $card3 = Add-Card -slide $slide -left 420 -top 284 -width 460 -height 62 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.4
+    $card3Title = Add-TextBox -slide $slide -left 442 -top 298 -width 240 -height 18 -text "per-turn web-search toggle" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true
+    $card3Body = Add-TextBox -slide $slide -left 442 -top 316 -width 400 -height 16 -text "Users can keep Claude inside the local corpus for a turn." -fontName "Aptos" -fontSize 12 -r 148 -g 163 -b 184
+
+    $card4 = Add-Card -slide $slide -left 420 -top 364 -width 460 -height 62 -fillR 17 -fillG 24 -fillB 39 -lineR 244 -lineG 114 -lineB 182 -lineWeight 1.4
+    $card4Title = Add-TextBox -slide $slide -left 442 -top 378 -width 240 -height 18 -text "verification persisted on messages" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true
+    $card4Body = Add-TextBox -slide $slide -left 442 -top 396 -width 400 -height 16 -text "Assistant rows now store verification_json for reloads." -fontName "Aptos" -fontSize 12 -r 148 -g 163 -b 184
+
+    Add-AnimSet $slide @($card1, $card1Title, $card1Body)
+    Add-AnimSet $slide @($card2, $card2Title, $card2Body)
+    Add-AnimSet $slide @($card3, $card3Title, $card3Body)
+    Add-AnimSet $slide @($card4, $card4Title, $card4Body)
 
     Add-Note $slide @"
 1:20-2:10
-Use this slide to prove this is more than a mock UI.
-Name the five implemented layers quickly: ingestion, storage, retrieval, chat agent, frontend.
-Then make one candid note: the OpenClaw files are not the source of truth yet.
+This slide is the real repo delta.
+The standout new feature is the verification layer: backend/verification extracts citations and direct quotes, checks them against retrieved evidence, and returns a structured report.
+Around that, the chat API also grew a streaming trace, a web-search toggle, and persisted verification metadata on assistant turns.
 "@
 
     # ------------------------------------------------------------------ slide 4
     $slide = $presentation.Slides.Add(4, 12)
-    Add-TitleFrame -slide $slide -title "How The Implemented Loop Works" -eyebrow "SYSTEM FLOW"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "CITATION VERIFIER" "Flags. Never rewrites."
+    Add-AnimSet $slide $header
 
-    $steps = @(
-        @{ X = 40;  Title = "1. Ingest"; Body = "Fetch official statute HTML and cache it on disk."; Accent = @(45,212,191) },
-        @{ X = 228; Title = "2. Persist"; Body = "Parse sections and store statutes plus factor tags in SQLite."; Accent = @(245,158,11) },
-        @{ X = 416; Title = "3. Index"; Body = "Build vector and keyword views over the statute corpus."; Accent = @(96,165,250) },
-        @{ X = 604; Title = "4. Retrieve"; Body = "Agent searches locally before it writes any factual answer."; Accent = @(244,114,182) },
-        @{ X = 792; Title = "5. Inspect"; Body = "Frontend shows cards inline and opens the full source modal."; Accent = @(251,146,60) }
-    )
+    $leftCard = Add-Card -slide $slide -left 74 -top 148 -width 372 -height 250 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.6
+    $leftTitle = Add-TextBox -slide $slide -left 98 -top 174 -width 130 -height 22 -text "clean example" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $leftChip = Add-Card -slide $slide -left 98 -top 214 -width 132 -height 34 -fillR 13 -fillG 148 -fillB 136 -lineR 13 -lineG 148 -lineB 136
+    Hide-Line $leftChip
+    $leftChipText = Add-TextBox -slide $slide -left 106 -top 221 -width 116 -height 18 -text "status: clean" -fontName "Aptos" -fontSize 12 -r 240 -g 253 -b 250 -bold $true -paragraphAlign 2
+    $leftBody = Add-TextBox -slide $slide -left 98 -top 270 -width 300 -height 88 `
+        -text "Supported citation extracted.`r`nSupported verbatim quote matched.`r`nNo hidden rewrite step." `
+        -fontName "Aptos" -fontSize 16 -r 203 -g 213 -b 225
 
-    foreach ($step in $steps) {
-        $shape = Add-Card -slide $slide -left $step.X -top 214 -width 136 -height 140 -fillR 18 -fillG 30 -fillB 54
-        $shape.Line.ForeColor.RGB = Get-Rgb $step.Accent[0] $step.Accent[1] $step.Accent[2]
-        $shape.Line.Weight = 1.4
-        $title = Add-TextBox -slide $slide -left ($step.X + 10) -top 230 -width 116 -height 34 `
-            -text $step.Title -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $rightCard = Add-Card -slide $slide -left 514 -top 148 -width 372 -height 250 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.6
+    $rightTitle = Add-TextBox -slide $slide -left 538 -top 174 -width 180 -height 22 -text "needs review example" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $rightChip = Add-Card -slide $slide -left 538 -top 214 -width 166 -height 34 -fillR 146 -fillG 64 -fillB 14 -lineR 146 -lineG 64 -lineB 14
+    Hide-Line $rightChip
+    $rightChipText = Add-TextBox -slide $slide -left 546 -top 221 -width 150 -height 18 -text "status: unsupported" -fontName "Aptos" -fontSize 12 -r 255 -g 237 -b 213 -bold $true -paragraphAlign 2
+    $rightBody = Add-TextBox -slide $slide -left 538 -top 270 -width 300 -height 88 `
+        -text "Fabricated quote surfaced explicitly.`r`nUnsupported citation stays visible.`r`nLawyer gets the warning, not false confidence." `
+        -fontName "Aptos" -fontSize 16 -r 203 -g 213 -b 225
 
-        $body = Add-TextBox -slide $slide -left ($step.X + 10) -top 274 -width 116 -height 60 `
-            -text $step.Body -fontName "Aptos" -fontSize 12 -r 203 -g 213 -b 225 -paragraphAlign 2
-        Add-AnimSet $slide @($shape, $title, $body)
-    }
+    $proofLine = Add-TextBox -slide $slide -left 128 -top 438 -width 704 -height 24 `
+        -text "Exercised locally with verify_turn: clean on matched evidence, unsupported on fabricated quote text." `
+        -fontName "Aptos" -fontSize 13 -r 148 -g 163 -b 184 -paragraphAlign 2
 
-    for ($i = 0; $i -lt 4; $i++) {
-        $x1 = $steps[$i].X + 136
-        $x2 = $steps[$i + 1].X
-        $line = Add-RuleLine -slide $slide -x1 ($x1 + 6) -y1 284 -x2 ($x2 - 6) -y2 284 -r 71 -g 85 -b 105 -weight 2
-        $arrow = $slide.Shapes.AddShape(33, $x2 - 16, 277, 10, 14)
-        Set-Fill $arrow 71 85 105
-        Hide-Line $arrow
-    }
-
-    $callout = Add-Card -slide $slide -left 136 -top 390 -width 688 -height 74 -fillR 30 -fillG 41 -fillB 59
-    $calloutText = Add-TextBox -slide $slide -left 154 -top 407 -width 652 -height 40 `
-        -text "Fast path: citation-shaped queries can skip semantic retrieval entirely. parse_citation turns inputs like 23152(a) into a stable slug before lookup." `
-        -fontName "Aptos" -fontSize 15 -r 226 -g 232 -b 240 -paragraphAlign 2
-    Add-AnimSet $slide @($callout, $calloutText)
+    Add-AnimSet $slide @($leftCard, $leftTitle, $leftChip, $leftChipText, $leftBody)
+    Add-AnimSet $slide @($rightCard, $rightTitle, $rightChip, $rightChipText, $rightBody)
+    Add-AnimSet $slide @($proofLine)
 
     Add-Note $slide @"
-2:10-2:55
-Walk left to right.
-This is the core implementation story: ingest, persist, index, retrieve, inspect.
-Pause on the fast path because it is one of the strongest trust features: citation lookup does not depend on vector quality.
+2:10-3:00
+This is the most important new capability to explain carefully.
+The verifier is deterministic, not another generation pass. It extracts direct citations and direct quotes, checks them against retrieved evidence, and produces a structured clean or unsupported report.
+Most importantly, it flags unsupported material instead of silently cleaning the answer.
 "@
 
     # ------------------------------------------------------------------ slide 5
     $slide = $presentation.Slides.Add(5, 12)
-    Add-TitleFrame -slide $slide -title "Verified Results From This Repo" -eyebrow "SMOKE TESTS + SAFETY RULES"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "CURRENT UX" "Chat-first, with source inspection built in"
+    Add-AnimSet $slide $header
 
-    $kpi1 = Add-Card -slide $slide -left 44 -top 166 -width 198 -height 132 -fillR 18 -fillG 30 -fillB 54
-    $kpi1Big = Add-TextBox -slide $slide -left 60 -top 190 -width 164 -height 44 -text "15 / 15" -fontName "Aptos Display" -fontSize 28 -r 45 -g 212 -b 191 -bold $true -paragraphAlign 2
-    $kpi1Lbl = Add-TextBox -slide $slide -left 60 -top 238 -width 164 -height 38 -text "retrieval + API smoke tests passed" -fontName "Aptos" -fontSize 14 -r 226 -g 232 -b 240 -paragraphAlign 2
-    Add-AnimSet $slide @($kpi1, $kpi1Big, $kpi1Lbl)
+    $chatSurface = Add-Svg -slide $slide -path $chatSvg -left 72 -top 112 -width 816 -height 358
+    Add-AnimSet $slide @($chatSurface)
 
-    $kpi2 = Add-Card -slide $slide -left 258 -top 166 -width 198 -height 132 -fillR 18 -fillG 30 -fillB 54
-    $kpi2Big = Add-TextBox -slide $slide -left 274 -top 190 -width 164 -height 44 -text "5 / 5" -fontName "Aptos Display" -fontSize 28 -r 245 -g 158 -b 11 -bold $true -paragraphAlign 2
-    $kpi2Lbl = Add-TextBox -slide $slide -left 274 -top 238 -width 164 -height 38 -text "chat adapter smoke tests passed" -fontName "Aptos" -fontSize 14 -r 226 -g 232 -b 240 -paragraphAlign 2
-    Add-AnimSet $slide @($kpi2, $kpi2Big, $kpi2Lbl)
+    $tag1 = Add-Card -slide $slide -left 84 -top 482 -width 176 -height 38 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.2
+    $tag1Text = Add-TextBox -slide $slide -left 94 -top 492 -width 156 -height 18 -text "persistent chats" -fontName "Aptos Display" -fontSize 14 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $tag2 = Add-Card -slide $slide -left 282 -top 482 -width 176 -height 38 -fillR 17 -fillG 24 -fillB 39 -lineR 96 -lineG 165 -lineB 250 -lineWeight 1.2
+    $tag2Text = Add-TextBox -slide $slide -left 292 -top 492 -width 156 -height 18 -text "streamed thinking" -fontName "Aptos Display" -fontSize 14 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $tag3 = Add-Card -slide $slide -left 480 -top 482 -width 176 -height 38 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.2
+    $tag3Text = Add-TextBox -slide $slide -left 490 -top 492 -width 156 -height 18 -text "inline source cards" -fontName "Aptos Display" -fontSize 14 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $tag4 = Add-Card -slide $slide -left 678 -top 482 -width 176 -height 38 -fillR 17 -fillG 24 -fillB 39 -lineR 244 -lineG 114 -lineB 182 -lineWeight 1.2
+    $tag4Text = Add-TextBox -slide $slide -left 688 -top 492 -width 156 -height 18 -text "source modal" -fontName "Aptos Display" -fontSize 14 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
 
-    $kpi3 = Add-Card -slide $slide -left 472 -top 166 -width 198 -height 132 -fillR 18 -fillG 30 -fillB 54
-    $kpi3Big = Add-TextBox -slide $slide -left 488 -top 190 -width 164 -height 44 -text "17" -fontName "Aptos Display" -fontSize 28 -r 96 -g 165 -b 250 -bold $true -paragraphAlign 2
-    $kpi3Lbl = Add-TextBox -slide $slide -left 488 -top 238 -width 164 -height 38 -text "locked factor labels exposed to retrieval and UI" -fontName "Aptos" -fontSize 14 -r 226 -g 232 -b 240 -paragraphAlign 2
-    Add-AnimSet $slide @($kpi3, $kpi3Big, $kpi3Lbl)
-
-    $kpi4 = Add-Card -slide $slide -left 686 -top 166 -width 224 -height 132 -fillR 18 -fillG 30 -fillB 54
-    $kpi4Big = Add-TextBox -slide $slide -left 702 -top 190 -width 190 -height 44 -text "retrieve first" -fontName "Aptos Display" -fontSize 24 -r 244 -g 114 -b 182 -bold $true -paragraphAlign 2
-    $kpi4Lbl = Add-TextBox -slide $slide -left 702 -top 238 -width 190 -height 38 -text "hard rule in the agent system prompt" -fontName "Aptos" -fontSize 14 -r 226 -g 232 -b 240 -paragraphAlign 2
-    Add-AnimSet $slide @($kpi4, $kpi4Big, $kpi4Lbl)
-
-    $proof = Add-Card -slide $slide -left 44 -top 330 -width 866 -height 126 -fillR 30 -fillG 41 -fillB 59
-    $proofText = Add-TextBox -slide $slide -left 66 -top 352 -width 822 -height 80 `
-        -text "- Citation normalization and exact-slug lookup are implemented and tested.`r`n- Assistant turns can persist enriched statute cards for reloads.`r`n- Web fallback is restricted to whitelisted legal domains rather than generic search results." `
-        -fontName "Aptos" -fontSize 16 -r 226 -g 232 -b 240
-    Add-AnimSet $slide @($proof, $proofText)
-
-    $honest = Add-TextBox -slide $slide -left 44 -top 470 -width 866 -height 24 `
-        -text "Honest current state: the local DB in this workspace is empty right now, so the deck reflects verified code behavior and tests rather than a freshly populated live corpus." `
-        -fontName "Aptos" -fontSize 12 -r 148 -g 163 -b 184
-    Add-Anim $slide $honest
+    Add-AnimSet $slide @($tag1, $tag1Text)
+    Add-AnimSet $slide @($tag2, $tag2Text)
+    Add-AnimSet $slide @($tag3, $tag3Text)
+    Add-AnimSet $slide @($tag4, $tag4Text)
 
     Add-Note $slide @"
-2:55-3:45
-This is the credibility slide.
-Say exactly what was verified: retrieval/API smoke tests, chat adapter smoke tests, factor taxonomy, and the retrieve-first rule.
-Also be explicit that the current checkout needs re-ingest before a live data demo.
+3:00-3:50
+Describe the actual surface the user experiences now.
+The app is no longer just a static three-panel search mockup. It uses persistent chats, can stream visible progress during a turn, shows inline statute hits in the conversation, and opens full source text in a modal.
+One honest caveat: the backend already stores verification reports, but the main chat UI is still light on explicit verification badges.
 "@
 
     # ------------------------------------------------------------------ slide 6
     $slide = $presentation.Slides.Add(6, 12)
-    Add-TitleFrame -slide $slide -title "What The Product Experience Looks Like" -eyebrow "CHAT-FIRST UI"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "PROOF" "What this repo already demonstrates"
+    Add-AnimSet $slide $header
 
-    $browser = Add-Card -slide $slide -left 54 -top 162 -width 852 -height 314 -fillR 248 -fillG 250 -fillB 252
-    $browser.Line.ForeColor.RGB = Get-Rgb 203 213 225
-    $chrome = $slide.Shapes.AddShape(1, 54, 162, 852, 34)
-    Set-Fill $chrome 226 232 240
-    Hide-Line $chrome
-    $chromeTitle = Add-TextBox -slide $slide -left 84 -top 170 -width 220 -height 18 -text "CaseLogic" -fontName "Aptos Display" -fontSize 14 -r 15 -g 23 -b 42 -bold $true
+    $proof = Add-Svg -slide $slide -path $proofSvg -left 80 -top 138 -width 280 -height 280
+    Add-AnimSet $slide @($proof)
 
-    $sidebar = $slide.Shapes.AddShape(1, 54, 196, 176, 280)
-    Set-Fill $sidebar 241 245 249
-    Hide-Line $sidebar
-    $sidebarTitle = Add-TextBox -slide $slide -left 70 -top 212 -width 124 -height 18 -text "+ New chat" -fontName "Aptos" -fontSize 13 -r 15 -g 23 -b 42 -bold $true
-    $sidebarItems = Add-TextBox -slide $slide -left 70 -top 252 -width 132 -height 130 `
-        -text "Rear-end at red light`r`n`r`nCal. Veh. Code 23152(a)`r`n`r`nImproper passing" `
-        -fontName "Aptos" -fontSize 12 -r 71 -g 85 -b 105
+    $stat1 = Add-Card -slide $slide -left 422 -top 152 -width 198 -height 92 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.5
+    $stat1Big = Add-TextBox -slide $slide -left 438 -top 174 -width 166 -height 28 -text "15 / 15" -fontName "Aptos Display" -fontSize 26 -r 45 -g 212 -b 191 -bold $true -paragraphAlign 2
+    $stat1Text = Add-TextBox -slide $slide -left 438 -top 206 -width 166 -height 22 -text "retrieval + API smoke tests" -fontName "Aptos" -fontSize 12 -r 203 -g 213 -b 225 -paragraphAlign 2
 
-    $thread = $slide.Shapes.AddShape(1, 230, 196, 676, 280)
-    Set-Fill $thread 255 255 255
-    Hide-Line $thread
-    Add-AnimSet $slide @($browser, $chrome, $chromeTitle, $thread)
+    $stat2 = Add-Card -slide $slide -left 646 -top 152 -width 198 -height 92 -fillR 17 -fillG 24 -fillB 39 -lineR 96 -lineG 165 -lineB 250 -lineWeight 1.5
+    $stat2Big = Add-TextBox -slide $slide -left 662 -top 174 -width 166 -height 28 -text "5 / 5" -fontName "Aptos Display" -fontSize 26 -r 96 -g 165 -b 250 -bold $true -paragraphAlign 2
+    $stat2Text = Add-TextBox -slide $slide -left 662 -top 206 -width 166 -height 22 -text "chat adapter smoke tests" -fontName "Aptos" -fontSize 12 -r 203 -g 213 -b 225 -paragraphAlign 2
 
-    $userBubble = Add-Card -slide $slide -left 588 -top 224 -width 278 -height 44 -fillR 45 -fillG 212 -fillB 191
-    Hide-Line $userBubble
-    $userText = Add-TextBox -slide $slide -left 600 -top 234 -width 252 -height 22 `
-        -text "What is the rule for red lights in CA?" -fontName "Aptos" -fontSize 13 -r 15 -g 23 -b 42
-    Add-AnimSet $slide @($sidebar, $sidebarTitle, $sidebarItems)
-    Add-AnimSet $slide @($userBubble, $userText)
+    $statusA = Add-Card -slide $slide -left 422 -top 284 -width 422 -height 58 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.3
+    $statusAText = Add-TextBox -slide $slide -left 440 -top 302 -width 386 -height 20 -text "Verifier exercised locally: clean + unsupported outcomes observed." -fontName "Aptos Display" -fontSize 15 -r 248 -g 250 -b 252 -bold $true
 
-    $assistantText = Add-TextBox -slide $slide -left 258 -top 286 -width 598 -height 58 `
-        -text "Drivers facing a steady circular red signal must stop and remain stopped until an indication to proceed appears [cite: ca-veh-21453-a]." `
-        -fontName "Aptos" -fontSize 14 -r 15 -g 23 -b 42
-    Add-Anim $slide $assistantText
+    $statusB = Add-Card -slide $slide -left 422 -top 360 -width 422 -height 58 -fillR 17 -fillG 24 -fillB 39 -lineR 100 -lineG 116 -lineB 139 -lineWeight 1.0
+    $statusBText = Add-TextBox -slide $slide -left 440 -top 378 -width 386 -height 20 -text "Current workspace is honest but empty: corpus needs fresh ingest before live demo." -fontName "Aptos" -fontSize 14 -r 203 -g 213 -b 225
 
-    $resultCard = Add-Card -slide $slide -left 258 -top 354 -width 608 -height 94 -fillR 248 -fillG 250 -fillB 252
-    $resultCard.Line.ForeColor.RGB = Get-Rgb 45 212 191
-    $resultTitle = Add-TextBox -slide $slide -left 274 -top 366 -width 320 -height 20 `
-        -text "Cal. Veh. Code Section 21453(a)" -fontName "Aptos Display" -fontSize 14 -r 15 -g 23 -b 42 -bold $true
-    $resultMeta = Add-TextBox -slide $slide -left 614 -top 366 -width 220 -height 20 `
-        -text "matched_via: citation" -fontName "Aptos" -fontSize 12 -r 13 -g 148 -b 136 -bold $true -paragraphAlign 3
-    $resultBody = Add-TextBox -slide $slide -left 274 -top 392 -width 560 -height 40 `
-        -text "Inline result cards let the user inspect the hit, then open the full source text in a dedicated modal." `
-        -fontName "Aptos" -fontSize 13 -r 71 -g 85 -b 105
-    Add-AnimSet $slide @($resultCard, $resultTitle, $resultMeta, $resultBody)
-
-    $callout1 = Add-TextBox -slide $slide -left 58 -top 486 -width 250 -height 28 -text "1. persistent chats" -fontName "Aptos Display" -fontSize 15 -r 45 -g 212 -b 191 -bold $true
-    $callout2 = Add-TextBox -slide $slide -left 340 -top 486 -width 220 -height 28 -text "2. grounded answer" -fontName "Aptos Display" -fontSize 15 -r 245 -g 158 -b 11 -bold $true
-    $callout3 = Add-TextBox -slide $slide -left 616 -top 486 -width 258 -height 28 -text "3. inspect the source" -fontName "Aptos Display" -fontSize 15 -r 96 -g 165 -b 250 -bold $true
-    Add-AnimSet $slide @($callout1)
-    Add-AnimSet $slide @($callout2)
-    Add-AnimSet $slide @($callout3)
+    Add-AnimSet $slide @($stat1, $stat1Big, $stat1Text)
+    Add-AnimSet $slide @($stat2, $stat2Big, $stat2Text)
+    Add-AnimSet $slide @($statusA, $statusAText)
+    Add-AnimSet $slide @($statusB, $statusBText)
 
     Add-Note $slide @"
-3:45-4:40
-Describe the frontend from the user's perspective.
-The important move is that statute results are part of the conversation, not a separate hidden debug panel.
-That makes the answer and the evidence visible in one place.
+3:50-4:40
+This is the proof slide.
+We already verified the search and chat surfaces with smoke tests, and we separately exercised the verifier to show both a supported and an unsupported outcome.
+Be transparent that the current checkout still needs a fresh ingest to become a polished live demo corpus.
 "@
 
     # ------------------------------------------------------------------ slide 7
     $slide = $presentation.Slides.Add(7, 12)
-    Add-TitleFrame -slide $slide -title "Grounding And Safety Are Built Into The Agent" -eyebrow "TRUST MODEL"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "HONEST GAPS" "What is still partial"
+    Add-AnimSet $slide $header
 
-    $cols = @(
-        @{ L = 44;  Title = "Retrieve first"; Body = "The system prompt explicitly forbids answering factual legal questions from memory. The agent is supposed to search before it states a rule."; Accent = @(45,212,191) },
-        @{ L = 338; Title = "Cite every claim"; Body = "The prompt requires each factual statement to end with a cite marker so the answer can be traced back to a statute or an allowed web source."; Accent = @(245,158,11) },
-        @{ L = 632; Title = "Limit web fallback"; Body = "If the agent leaves the local corpus, it uses a Firecrawl-backed search that rejects non-whitelisted domains server-side."; Accent = @(96,165,250) }
-    )
+    $gap1 = Add-Card -slide $slide -left 70 -top 166 -width 250 -height 230 -fillR 17 -fillG 24 -fillB 39 -lineR 51 -lineG 65 -lineB 85 -lineWeight 1.2
+    $gap1Title = Add-TextBox -slide $slide -left 94 -top 200 -width 202 -height 42 -text "OpenClaw manifests are still placeholders" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $gap1Body = Add-TextBox -slide $slide -left 94 -top 268 -width 202 -height 56 -text "The working agent logic lives in backend/agent today." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184 -paragraphAlign 2
 
-    foreach ($col in $cols) {
-        $shape = Add-Card -slide $slide -left $col.L -top 188 -width 250 -height 228 -fillR 18 -fillG 30 -fillB 54
-        $shape.Line.ForeColor.RGB = Get-Rgb $col.Accent[0] $col.Accent[1] $col.Accent[2]
-        $shape.Line.Weight = 1.5
-        $badge = $slide.Shapes.AddShape(9, ($col.L + 92), 204, 66, 66)
-        Set-Fill $badge $col.Accent[0] $col.Accent[1] $col.Accent[2]
-        Hide-Line $badge
+    $gap2 = Add-Card -slide $slide -left 354 -top 166 -width 250 -height 230 -fillR 17 -fillG 24 -fillB 39 -lineR 51 -lineG 65 -lineB 85 -lineWeight 1.2
+    $gap2Title = Add-TextBox -slide $slide -left 378 -top 200 -width 202 -height 42 -text "No shipped eval_report writer yet" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $gap2Body = Add-TextBox -slide $slide -left 378 -top 268 -width 202 -height 56 -text "Status can read eval metadata, but the producer is still missing." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184 -paragraphAlign 2
 
-        $title = Add-TextBox -slide $slide -left ($col.L + 18) -top 286 -width 214 -height 28 `
-            -text $col.Title -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-        $body = Add-TextBox -slide $slide -left ($col.L + 18) -top 322 -width 214 -height 74 `
-            -text $col.Body -fontName "Aptos" -fontSize 13 -r 203 -g 213 -b 225 -paragraphAlign 2
-        Add-AnimSet $slide @($shape, $badge, $title, $body)
-    }
+    $gap3 = Add-Card -slide $slide -left 638 -top 166 -width 250 -height 230 -fillR 17 -fillG 24 -fillB 39 -lineR 51 -lineG 65 -lineB 85 -lineWeight 1.2
+    $gap3Title = Add-TextBox -slide $slide -left 662 -top 200 -width 202 -height 42 -text "Verification is stronger in backend than in UI" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $gap3Body = Add-TextBox -slide $slide -left 662 -top 268 -width 202 -height 56 -text "Reports persist on assistant rows, but the main chat badge story still needs polish." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184 -paragraphAlign 2
 
-    $strip = Add-Card -slide $slide -left 124 -top 438 -width 706 -height 58 -fillR 30 -fillG 41 -fillB 59
-    $stripText = Add-TextBox -slide $slide -left 144 -top 454 -width 666 -height 26 `
-        -text "If no source supports a claim, the prompt instructs the agent to mark it unsupported rather than silently inventing or deleting it." `
-        -fontName "Aptos" -fontSize 15 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-    Add-AnimSet $slide @($strip, $stripText)
+    Add-AnimSet $slide @($gap1, $gap1Title, $gap1Body)
+    Add-AnimSet $slide @($gap2, $gap2Title, $gap2Body)
+    Add-AnimSet $slide @($gap3, $gap3Title, $gap3Body)
 
     Add-Note $slide @"
-4:40-5:25
-This is the trust slide.
-Emphasize that the guardrails are not just UI language; they are baked into the prompt and tool design.
-The strongest line to land: unsupported claims should be exposed, not hidden.
+4:40-5:30
+Call these out yourself so nobody has to discover them by surprise.
+The repo is ahead on backend grounding features, but still behind on OpenClaw packaging, evaluation reporting, and fully surfacing verification in the main chat UI.
+That honesty actually strengthens the presentation.
 "@
 
     # ------------------------------------------------------------------ slide 8
     $slide = $presentation.Slides.Add(8, 12)
-    Add-TitleFrame -slide $slide -title "Gaps We Can State Clearly -- And The Fastest Next Moves" -eyebrow "HONEST STATUS"
+    Add-DarkBackground $slide | Out-Null
+    $header = Add-SectionHeader $slide "NEXT MOVES" "Fastest path to a stronger demo"
+    Add-AnimSet $slide $header
 
-    $gap = Add-Card -slide $slide -left 44 -top 172 -width 398 -height 282 -fillR 30 -fillG 41 -fillB 59
-    $gapTitle = Add-TextBox -slide $slide -left 64 -top 194 -width 250 -height 28 -text "Still missing or partial" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
-    $gapBody = Add-TextBox -slide $slide -left 64 -top 232 -width 338 -height 170 `
-        -text "- OpenClaw tools.json and agent_prompt.md are still stubs.`r`n`r`n- There is no finished evaluation harness that writes eval_report.json yet.`r`n`r`n- This workspace needs a fresh ingest before it can demo a live populated corpus." `
-        -fontName "Aptos" -fontSize 15 -r 226 -g 232 -b 240
-    Add-AnimSet $slide @($gap, $gapTitle, $gapBody)
-
-    $next = Add-Card -slide $slide -left 468 -top 172 -width 442 -height 282 -fillR 18 -fillG 30 -fillB 54
-    $nextTitle = Add-TextBox -slide $slide -left 490 -top 194 -width 270 -height 28 -text "Best next 3 moves" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
-    Add-AnimSet $slide @($next, $nextTitle)
-
-    $move1 = Add-Card -slide $slide -left 490 -top 236 -width 396 -height 58 -fillR 15 -fillG 23 -fillB 42
-    $move1.Line.ForeColor.RGB = Get-Rgb 45 212 191
-    $move1Text = Add-TextBox -slide $slide -left 506 -top 252 -width 364 -height 24 -text "1. Run full ingest + retrieval build so the live corpus is demo-ready." -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252
-    Add-AnimSet $slide @($move1, $move1Text)
-
-    $move2 = Add-Card -slide $slide -left 490 -top 306 -width 396 -height 58 -fillR 15 -fillG 23 -fillB 42
-    $move2.Line.ForeColor.RGB = Get-Rgb 245 158 11
-    $move2Text = Add-TextBox -slide $slide -left 506 -top 322 -width 364 -height 24 -text "2. Add the eval-report writer so /status can show a real recall number." -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252
-    Add-AnimSet $slide @($move2, $move2Text)
-
-    $move3 = Add-Card -slide $slide -left 490 -top 376 -width 396 -height 58 -fillR 15 -fillG 23 -fillB 42
-    $move3.Line.ForeColor.RGB = Get-Rgb 96 165 250
-    $move3Text = Add-TextBox -slide $slide -left 506 -top 392 -width 364 -height 24 -text "3. Point OpenClaw manifests at the already-working backend agent tools." -fontName "Aptos" -fontSize 14 -r 248 -g 250 -b 252
-    Add-AnimSet $slide @($move3, $move3Text)
-
-    $closeLine = Add-TextBox -slide $slide -left 44 -top 474 -width 866 -height 24 `
-        -text "The good news: most remaining work is integration, dataset population, and reporting -- not a rewrite of the core architecture." `
-        -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184 -paragraphAlign 2
-    Add-Anim $slide $closeLine
-
-    Add-Note $slide @"
-5:25-6:15
-This slide keeps the presentation honest and makes the next steps concrete.
-Frame the gaps as integration work, not evidence that the architecture is fake.
-That turns the conversation from "is anything here real?" to "what gets us to demo readiness fastest?"
-"@
-
-    # ------------------------------------------------------------------ slide 9
-    $slide = $presentation.Slides.Add(9, 12)
-    Add-TitleFrame -slide $slide -title "Closing Takeaway" -eyebrow "WHY THIS MATTERS"
-
-    $final = Add-TextBox -slide $slide -left 112 -top 164 -width 736 -height 94 `
-        -text "CaseLogic already has the core research loop that matters most: ingest authoritative law, retrieve before answering, and let the user inspect the source immediately." `
+    $closeHero = Add-TextBox -slide $slide -left 110 -top 126 -width 740 -height 44 `
+        -text "The core loop is real. The next work is integration and polish." `
         -fontName "Aptos Display" -fontSize 24 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-    Add-Anim $slide $final
+    Add-AnimSet $slide @($closeHero)
 
-    $pill1 = Add-Card -slide $slide -left 132 -top 292 -width 196 -height 62 -fillR 30 -fillG 41 -fillB 59
-    $pill2 = Add-Card -slide $slide -left 382 -top 292 -width 196 -height 62 -fillR 30 -fillG 41 -fillB 59
-    $pill3 = Add-Card -slide $slide -left 632 -top 292 -width 196 -height 62 -fillR 30 -fillG 41 -fillB 59
-    $pill1.Line.ForeColor.RGB = Get-Rgb 45 212 191
-    $pill2.Line.ForeColor.RGB = Get-Rgb 245 158 11
-    $pill3.Line.ForeColor.RGB = Get-Rgb 96 165 250
-    $pill1Text = Add-TextBox -slide $slide -left 146 -top 314 -width 168 -height 20 -text "source-grounded" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-    $pill2Text = Add-TextBox -slide $slide -left 396 -top 314 -width 168 -height 20 -text "retrieval-first" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-    $pill3Text = Add-TextBox -slide $slide -left 646 -top 314 -width 168 -height 20 -text "inspectable" -fontName "Aptos Display" -fontSize 16 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
-    Add-AnimSet $slide @($pill1, $pill1Text)
-    Add-AnimSet $slide @($pill2, $pill2Text)
-    Add-AnimSet $slide @($pill3, $pill3Text)
+    $step1 = Add-Card -slide $slide -left 88 -top 222 -width 242 -height 162 -fillR 17 -fillG 24 -fillB 39 -lineR 45 -lineG 212 -lineB 191 -lineWeight 1.5
+    $step1Num = Add-TextBox -slide $slide -left 108 -top 244 -width 40 -height 24 -text "01" -fontName "Aptos Display" -fontSize 20 -r 45 -g 212 -b 191 -bold $true
+    $step1Title = Add-TextBox -slide $slide -left 108 -top 278 -width 180 -height 24 -text "Populate corpus" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $step1Body = Add-TextBox -slide $slide -left 108 -top 314 -width 194 -height 40 -text "Run ingest + retrieval build so the live experience has data behind it." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184
 
-    $qa = Add-TextBox -slide $slide -left 112 -top 404 -width 736 -height 44 `
-        -text "Recommended close: show the chat flow, open the statute modal, and end on the fact that the system exposes its evidence instead of hiding it." `
-        -fontName "Aptos" -fontSize 16 -r 203 -g 213 -b 225 -paragraphAlign 2
-    Add-Anim $slide $qa
+    $step2 = Add-Card -slide $slide -left 358 -top 222 -width 242 -height 162 -fillR 17 -fillG 24 -fillB 39 -lineR 96 -lineG 165 -lineB 250 -lineWeight 1.5
+    $step2Num = Add-TextBox -slide $slide -left 378 -top 244 -width 40 -height 24 -text "02" -fontName "Aptos Display" -fontSize 20 -r 96 -g 165 -b 250 -bold $true
+    $step2Title = Add-TextBox -slide $slide -left 378 -top 278 -width 180 -height 24 -text "Surface verifier" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $step2Body = Add-TextBox -slide $slide -left 378 -top 314 -width 194 -height 40 -text "Turn stored verification_json into a visible chat badge and detail view." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184
+
+    $step3 = Add-Card -slide $slide -left 628 -top 222 -width 242 -height 162 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.5
+    $step3Num = Add-TextBox -slide $slide -left 648 -top 244 -width 40 -height 24 -text "03" -fontName "Aptos Display" -fontSize 20 -r 245 -g 158 -b 11 -bold $true
+    $step3Title = Add-TextBox -slide $slide -left 648 -top 278 -width 180 -height 24 -text "Package for OpenClaw" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $step3Body = Add-TextBox -slide $slide -left 648 -top 314 -width 194 -height 40 -text "Point the manifest files at the already-working agent loop." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184
+
+    $closeLine = Add-TextBox -slide $slide -left 150 -top 432 -width 660 -height 24 `
+        -text "Best closing line: the system now shows its work, and the verifier makes unsupported claims visible." `
+        -fontName "Aptos" -fontSize 15 -r 203 -g 213 -b 225 -paragraphAlign 2
+
+    Add-AnimSet $slide @($step1, $step1Num, $step1Title, $step1Body)
+    Add-AnimSet $slide @($step2, $step2Num, $step2Title, $step2Body)
+    Add-AnimSet $slide @($step3, $step3Num, $step3Title, $step3Body)
+    Add-AnimSet $slide @($closeLine)
 
     Add-Note $slide @"
-6:15-7:00
-Finish by returning to the core promise: evidence first.
-If you are presenting live, this is where you either open the product or pause for Q and A.
-The line to leave them with: the system shows its work.
+5:30-7:00
+End with momentum.
+The architecture no longer needs a conceptual defense. The next steps are concrete: populate the corpus, surface the verifier in the UI, and package the current agent loop cleanly for OpenClaw.
+If you want a final sentence, use: CaseLogic now shows its work, and the verifier makes unsupported claims visible.
 "@
 
     $presentation.SaveAs($outputPath)

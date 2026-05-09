@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.agent import history
@@ -45,6 +46,8 @@ from backend.agent.prompts import SYSTEM_PROMPT
 from backend.agent.sources import statute as statute_source
 from backend.agent.sources import web as web_source
 from backend.config import Settings, load_settings
+from backend.models import Statute
+from backend.verification import Evidence, VerificationReport, verify_turn
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +64,10 @@ log = logging.getLogger(__name__)
 #   - "tool_start"  : {"name": str, "label": str, "input": dict}
 #   - "tool_done"   : {"name": str, "summary": str, "count": int | None}
 #   - "drafting"    : {} — Claude has stopped tool-using; final answer next
+#   - "verifying"   : {} — verifier is auditing citations + quotes
+#   - "verified"    : {"status": str, "citations_total": int,
+#                      "citations_supported": int, "quotes_total": int,
+#                      "quotes_supported": int, "unsupported": int}
 #
 # Callbacks must be cheap and non-blocking — they fire on the agent's
 # worker thread. The route handler bridges them to an asyncio.Queue.
@@ -84,6 +91,10 @@ class AgentTurn:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     statute_hits: list[statute_source.StatuteToolHit] = field(default_factory=list)
     web_hits: list[web_source.WebToolHit] = field(default_factory=list)
+    # Citation + quote audit run after Claude's final draft. None only when
+    # the agent never produced any final text (e.g. error path) — the route
+    # layer treats None the same as `status="skipped"`.
+    verification: VerificationReport | None = None
     created_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -333,7 +344,36 @@ def run_agent_turn(
                 next_turn_index=next_idx,
             )
 
-    # --- 5. Auto-title and bump updated_at
+    # --- 5. Verification pass — audit citations + direct quotes against
+    # the evidence we actually retrieved this turn. Result is attached to
+    # the turn and surfaced through the API; the verifier never rewrites
+    # the assistant's text (we flag, the user decides).
+    deduped_statute_hits = _dedupe_statutes(statute_hits)
+    deduped_web_hits = _dedupe_web(web_hits)
+
+    emit("verifying", {})
+    verification = _run_verifier(
+        db=db,
+        answer_text=final_text,
+        statute_hits=deduped_statute_hits,
+        web_hits=deduped_web_hits,
+    )
+    emit(
+        "verified",
+        {
+            "status": verification.status,
+            "citations_total": verification.citations_total,
+            "citations_supported": verification.citations_supported,
+            "quotes_total": verification.quotes_total,
+            "quotes_supported": verification.quotes_supported,
+            "unsupported": (
+                len(verification.unsupported_citations)
+                + len(verification.unsupported_quotes)
+            ),
+        },
+    )
+
+    # --- 6. Auto-title and bump updated_at
     title = _autotitle(user_message) if is_first_turn else None
     history.touch_session(db, session_id, title=title)
 
@@ -343,8 +383,9 @@ def run_agent_turn(
         session_title=session_row.title if session_row else None,
         assistant_text=final_text or "",
         tool_calls=tool_calls_log,
-        statute_hits=_dedupe_statutes(statute_hits),
-        web_hits=_dedupe_web(web_hits),
+        statute_hits=deduped_statute_hits,
+        web_hits=deduped_web_hits,
+        verification=verification,
     )
 
 
@@ -508,6 +549,102 @@ def _autotitle(user_message: str) -> str:
     if len(flat) <= 80:
         return flat
     return flat[:77].rstrip() + "\u2026"
+
+
+def _run_verifier(
+    *,
+    db: Session,
+    answer_text: str,
+    statute_hits: list[statute_source.StatuteToolHit],
+    web_hits: list[web_source.WebToolHit],
+) -> VerificationReport:
+    """Build the evidence list and run the verifier.
+
+    `StatuteToolHit` only carries the tool's snippet, which is too short
+    for reliable quote-substring matching. We pull the full statute_text
+    + complete_statute from the DB (one IN-clause query, deduped) and
+    package it as `Evidence(kind="statute", ...)`. Web hits are passed
+    through as-is — we only have their snippet to begin with.
+
+    Failures here are non-fatal: if the DB lookup blows up, we still
+    return a report (with status="skipped" and a diagnostic note) so the
+    UI doesn't render a misleading "verified" badge by accident.
+    """
+
+    evidence: list[Evidence] = []
+
+    if statute_hits:
+        try:
+            slugs = [h.statute_id for h in statute_hits]
+            rows = list(
+                db.scalars(select(Statute).where(Statute.statute_id.in_(slugs)))
+            )
+            row_by_slug = {r.statute_id: r for r in rows}
+            for h in statute_hits:
+                row = row_by_slug.get(h.statute_id)
+                if row is None:
+                    # Fall back to the snippet — at least the citation
+                    # match still works against the slug-derived metadata.
+                    evidence.append(
+                        Evidence(
+                            kind="statute",
+                            text=h.snippet or "",
+                            display_url=h.official_url,
+                            statute_id=h.statute_id,
+                            universal_citation=h.universal_citation,
+                        )
+                    )
+                    continue
+                full_text = "\n".join(
+                    t for t in (row.statute_text, row.complete_statute) if t
+                )
+                evidence.append(
+                    Evidence(
+                        kind="statute",
+                        text=full_text or h.snippet or "",
+                        display_url=row.official_url,
+                        statute_id=row.statute_id,
+                        universal_citation=row.universal_citation,
+                        section_number=row.section_number,
+                        jurisdiction=_normalize_jurisdiction(row.jurisdiction),
+                    )
+                )
+        except Exception as exc:  # never wedge the turn over verification
+            log.exception("verifier: failed to load statute evidence")
+            return VerificationReport(
+                status="skipped",
+                notes=[f"evidence-load failed: {type(exc).__name__}"],
+            )
+
+    for w in web_hits:
+        evidence.append(
+            Evidence(
+                kind="web",
+                text=w.snippet or "",
+                display_url=w.url,
+            )
+        )
+
+    return verify_turn(answer_text or "", evidence)
+
+
+# Map the long-form jurisdiction strings stored on `Statute.jurisdiction`
+# (e.g. "California") to the two-letter codes the verifier matches against.
+# Falls through unchanged for already-short codes ("CA", "WA"), so the
+# verifier handles either flavor.
+_JURIS_LONG_TO_SHORT = {
+    "CALIFORNIA": "CA",
+    "WASHINGTON": "WA",
+    "FLORIDA": "FL",
+    "NEW YORK": "NY",
+}
+
+
+def _normalize_jurisdiction(value: str | None) -> str | None:
+    if not value:
+        return None
+    upper = value.strip().upper()
+    return _JURIS_LONG_TO_SHORT.get(upper, upper)
 
 
 def _dedupe_statutes(

@@ -52,6 +52,10 @@ def _apply_lightweight_migrations() -> None:
         # 2026-05-09: chat_messages.hits_json — frontend-renderable hits per
         # final assistant message. Older rows stay NULL.
         "ALTER TABLE chat_messages ADD COLUMN hits_json TEXT",
+        # 2026-05-09: chat_messages.verification_json — citation + quote
+        # audit report attached to each final assistant message so reloads
+        # show the same warning badge without re-running the verifier.
+        "ALTER TABLE chat_messages ADD COLUMN verification_json TEXT",
     ]
 
     with engine.begin() as conn:

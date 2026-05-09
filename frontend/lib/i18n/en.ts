@@ -101,6 +101,44 @@ export const strings = {
     crossRefTooltip: "Cross-reference to another statute",
   },
 
+  verification: {
+    // Headline labels rendered in the chip under each assistant message.
+    statusLabel: {
+      clean: "Sources verified",
+      unsupported: "Needs review",
+      skipped: "No claims to verify",
+    } as Record<"clean" | "unsupported" | "skipped", string>,
+    // One-line summary line when the chip is collapsed.
+    summary: (
+      citationsSupported: number,
+      citationsTotal: number,
+      quotesSupported: number,
+      quotesTotal: number,
+    ) =>
+      `${citationsSupported}/${citationsTotal} citations and ` +
+      `${quotesSupported}/${quotesTotal} quotes traced to retrieved sources.`,
+    skippedHint:
+      "The verifier audits direct citations and quoted text. Nothing in this answer required checking.",
+    // Section headers in the expanded panel.
+    unsupportedCitationsTitle: "Unsupported citations",
+    unsupportedQuotesTitle: "Unverified quotes",
+    showDetails: "Show details",
+    hideDetails: "Hide details",
+    // Tooltips for the badge itself.
+    tooltipClean: "Every citation and quoted span maps to retrieved evidence.",
+    tooltipUnsupported:
+      "At least one citation or quote couldn't be traced to a retrieved source. Review before relying on this answer.",
+    tooltipSkipped: "Nothing to verify in this answer.",
+    // Live trace strings (SSE).
+    trace: {
+      running: "Auditing citations and quotes\u2026",
+      cleanSummary: "All citations and quotes verified",
+      unsupportedSummary: (n: number) =>
+        `${n} unsupported claim${n === 1 ? "" : "s"}`,
+      skippedSummary: "Nothing to verify",
+    },
+  },
+
   themeToggle: {
     ariaLabel: "Color theme",
     optionLabel: {

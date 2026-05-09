@@ -103,11 +103,48 @@ export interface Message {
 // Multi-chat sessions. Mirrors backend/api/schemas.py — see
 // backend/api/routes_chats.py for the contract.
 
+/**
+ * Status the verifier attaches to each assistant turn.
+ *  - "clean"       — every citation and quote checked out against retrieved evidence.
+ *  - "unsupported" — at least one citation or quote couldn't be traced.
+ *  - "skipped"     — nothing to audit (empty answer, or no citations + no quotes).
+ */
+export type VerificationStatus = "clean" | "unsupported" | "skipped";
+
+export interface UnsupportedCitation {
+  text: string;
+  offset: number;
+  section_number: string;
+  jurisdiction: string | null;
+  reason: string;
+}
+
+export interface UnsupportedQuote {
+  text: string;
+  offset: number;
+  // "double" | "curly" | "blockquote" — informational, drives chip styling.
+  kind: string;
+  reason: string;
+}
+
+export interface VerificationReport {
+  status: VerificationStatus;
+  citations_total: number;
+  citations_supported: number;
+  quotes_total: number;
+  quotes_supported: number;
+  unsupported_citations: UnsupportedCitation[];
+  unsupported_quotes: UnsupportedQuote[];
+}
+
 export interface ChatMessage {
   id: number;
   role: MessageRole;
   content: string;
   hits: StatuteHit[];
+  // Set on assistant messages once the verifier has run. Older rows
+  // (pre-verification-layer) and turns that were skipped leave this null.
+  verification?: VerificationReport | null;
   created_at: string;
 }
 
@@ -179,6 +216,16 @@ export type ChatStreamEvent =
       count: number | null;
     }
   | { type: "drafting" }
+  | { type: "verifying" }
+  | {
+      type: "verified";
+      status: VerificationStatus;
+      citations_total: number;
+      citations_supported: number;
+      quotes_total: number;
+      quotes_supported: number;
+      unsupported: number;
+    }
   | {
       type: "final";
       user_message: ChatMessage;
@@ -193,7 +240,16 @@ export type ThinkingStep =
   | { kind: "thinking"; label: string }
   | { kind: "thought"; text: string }
   | { kind: "tool"; name: string; label: string; summary?: string; done: boolean }
-  | { kind: "drafting" };
+  | { kind: "drafting" }
+  | {
+      kind: "verifying";
+      // When `done` is false, the verifier is still running. Once `done`
+      // flips true, `summary` carries the headline (e.g. "All citations
+      // and quotes verified" or "1 unsupported citation").
+      done: boolean;
+      status?: VerificationStatus;
+      summary?: string;
+    };
 
 // Single-user demo profile. Persisted server-side; injected into the LLM
 // system prompt on every chat send so responses are tailored.

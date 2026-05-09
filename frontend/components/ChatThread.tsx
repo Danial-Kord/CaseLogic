@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { strings } from "@/lib/i18n/en";
 import type {
   ChatDetail,
   ChatMessage,
@@ -10,6 +11,7 @@ import type {
 } from "@/lib/types";
 import MarkdownContent from "./MarkdownContent";
 import ResultsPanel from "./ResultsPanel";
+import VerificationPanel from "./VerificationPanel";
 
 const WEB_SEARCH_PREF_KEY = "caselogic-web-search-enabled";
 
@@ -184,6 +186,10 @@ function MessageBubble({
         <MarkdownContent content={message.content} />
       </div>
 
+      {message.verification && (
+        <VerificationPanel report={message.verification} />
+      )}
+
       {message.hits.length > 0 && (
         <ResultsPanel
           results={message.hits}
@@ -268,6 +274,19 @@ function ThinkingStepRow({
     );
   }
 
+  if (step.kind === "verifying") {
+    return (
+      <li className="flex items-start gap-2 text-sm">
+        {indicator}
+        <span className="text-brand-secondary">
+          {step.done && step.summary
+            ? step.summary
+            : strings.verification.trace.running}
+        </span>
+      </li>
+    );
+  }
+
   // thinking
   return (
     <li className="flex items-start gap-2 text-sm">
@@ -278,8 +297,8 @@ function ThinkingStepRow({
 }
 
 function renderIndicator(step: ThinkingStep, isLast: boolean) {
-  // For tool steps, indicator depends on status; for everything else, the
-  // last entry shows a spinner and earlier entries show a checkmark dot.
+  // For tool + verifying steps, indicator depends on status; for everything
+  // else, the last entry shows a spinner and earlier entries show a dot.
   if (step.kind === "tool") {
     if (step.done) {
       return (
@@ -293,6 +312,32 @@ function renderIndicator(step: ThinkingStep, isLast: boolean) {
       <span
         aria-hidden="true"
         className="mt-0.5 inline-block h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-brand-accent border-t-transparent"
+      />
+    );
+  }
+
+  if (step.kind === "verifying") {
+    if (!step.done) {
+      return (
+        <span
+          aria-hidden="true"
+          className="mt-0.5 inline-block h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-brand-accent border-t-transparent"
+        />
+      );
+    }
+    // Color the dot once we know the verdict — green for clean, amber for
+    // unsupported, neutral for skipped — so the trace doubles as a stable
+    // mini-summary even after the assistant message renders below.
+    const color =
+      step.status === "unsupported"
+        ? "bg-amber-500"
+        : step.status === "clean"
+          ? "bg-emerald-500"
+          : "bg-brand-muted";
+    return (
+      <span
+        aria-hidden="true"
+        className={`mt-1 inline-block h-2 w-2 flex-shrink-0 rounded-full ${color}`}
       />
     );
   }

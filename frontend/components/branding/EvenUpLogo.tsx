@@ -8,14 +8,14 @@ import Image from "next/image";
 export default function EvenUpLogo({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`relative h-9 w-full max-w-[15rem] shrink-0 ${className}`}
+      className={`relative h-14 w-full max-w-[22rem] shrink-0 ${className}`}
     >
       <Image
         src="/evenup-logo.jpg"
         alt="EvenUp"
         fill
         className="object-contain object-left"
-        sizes="(max-width: 18rem) 100vw, 15rem"
+        sizes="(max-width: 22rem) 100vw, 22rem"
         priority
       />
     </div>

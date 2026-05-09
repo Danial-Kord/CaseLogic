@@ -70,6 +70,54 @@ class FrontendStatuteHit(BaseModel):
     matched_via: str
 
 
+class FrontendUnsupportedCitation(BaseModel):
+    """One citation flagged by the verifier as unsupported by retrieved
+    evidence. Mirror of `frontend/lib/types.ts#UnsupportedCitation`."""
+
+    text: str
+    offset: int
+    section_number: str
+    jurisdiction: Optional[str] = None
+    reason: str
+
+
+class FrontendUnsupportedQuote(BaseModel):
+    """One quoted span flagged by the verifier as not appearing verbatim
+    in any retrieved source. Mirror of
+    `frontend/lib/types.ts#UnsupportedQuote`."""
+
+    text: str
+    offset: int
+    kind: str
+    reason: str
+
+
+class FrontendVerificationReport(BaseModel):
+    """Citation + quote audit attached to an assistant message.
+
+    `status` is the headline:
+      - "clean"       — every citation and quote checked out
+      - "unsupported" — at least one citation or quote couldn't be
+                        traced to retrieved evidence
+      - "skipped"     — nothing to verify (empty answer, or no citations
+                        and no quotes were emitted)
+
+    `unsupported_*` lists drive the detail pop-out.
+    """
+
+    status: str
+    citations_total: int = 0
+    citations_supported: int = 0
+    quotes_total: int = 0
+    quotes_supported: int = 0
+    unsupported_citations: list[FrontendUnsupportedCitation] = Field(
+        default_factory=list
+    )
+    unsupported_quotes: list[FrontendUnsupportedQuote] = Field(
+        default_factory=list
+    )
+
+
 class FrontendChatMessage(BaseModel):
     """Mirror of `frontend/lib/types.ts#ChatMessage`."""
 
@@ -77,6 +125,7 @@ class FrontendChatMessage(BaseModel):
     role: str  # 'user' | 'assistant'
     content: str
     hits: list[FrontendStatuteHit] = Field(default_factory=list)
+    verification: Optional[FrontendVerificationReport] = None
     created_at: datetime
 
 
@@ -403,17 +452,25 @@ def _build_send_response(
     """Shared post-agent handling for both /messages and /messages/stream.
 
     Enriches statute hits against the `statutes` table, persists the hit
-    JSON onto the final assistant row so reloads keep rendering result
-    cards, and returns the frontend-shaped pair.
+    JSON + verification report onto the final assistant row so reloads
+    keep rendering result cards and the warning badge, and returns the
+    frontend-shaped pair.
     """
 
     enriched_hits = _enrich_hits(db, turn.statute_hits)
+    verification = _build_verification(turn)
+
     assistant_row = _last_assistant_row(db, chat_id)
     if assistant_row is not None:
         assistant_row.hits_json = json.dumps(
             [h.model_dump(mode="json") for h in enriched_hits],
             ensure_ascii=False,
         )
+        if verification is not None:
+            assistant_row.verification_json = json.dumps(
+                verification.model_dump(mode="json"),
+                ensure_ascii=False,
+            )
 
     user_row = _last_user_row(db, chat_id)
     session_row = get_session_row(db, chat_id)
@@ -431,6 +488,7 @@ def _build_send_response(
         role="assistant",
         content=turn.assistant_text or "",
         hits=enriched_hits,
+        verification=verification,
         created_at=assistant_row.created_at if assistant_row else turn.created_at,
     )
 
@@ -438,6 +496,43 @@ def _build_send_response(
         user_message=user_message,
         assistant_message=assistant_message,
         chat_title=title,
+    )
+
+
+def _build_verification(turn: AgentTurn) -> Optional[FrontendVerificationReport]:
+    """Translate the agent's internal `VerificationReport` into the
+    Pydantic shape the frontend expects. Returns None when the agent
+    didn't produce a report (e.g. error path) so the API surfaces a
+    clean `null` instead of misleading zero-counts."""
+
+    report = turn.verification
+    if report is None:
+        return None
+    return FrontendVerificationReport(
+        status=report.status,
+        citations_total=report.citations_total,
+        citations_supported=report.citations_supported,
+        quotes_total=report.quotes_total,
+        quotes_supported=report.quotes_supported,
+        unsupported_citations=[
+            FrontendUnsupportedCitation(
+                text=c.text,
+                offset=c.offset,
+                section_number=c.section_number,
+                jurisdiction=c.jurisdiction,
+                reason=c.reason,
+            )
+            for c in report.unsupported_citations
+        ],
+        unsupported_quotes=[
+            FrontendUnsupportedQuote(
+                text=q.text,
+                offset=q.offset,
+                kind=q.kind,
+                reason=q.reason,
+            )
+            for q in report.unsupported_quotes
+        ],
     )
 
 
@@ -507,6 +602,28 @@ def _parse_hits(raw: str | None) -> list[FrontendStatuteHit]:
     return out
 
 
+def _parse_verification(raw: str | None) -> Optional[FrontendVerificationReport]:
+    """Deserialize a stored verification_json blob, tolerantly.
+
+    Older rows (pre-verification-layer) leave the column NULL, in which
+    case the assistant message simply has no verification chip. A
+    malformed payload is treated the same — better to render no badge
+    than a misleading one.
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    try:
+        return FrontendVerificationReport.model_validate(parsed)
+    except Exception:
+        return None
+
+
 def _render_messages(rows: list[ChatMessage]) -> list[FrontendChatMessage]:
     """Project stored ChatMessage rows into the flat shape the frontend
     expects. Skips internal tool_result rows and empty assistant rows."""
@@ -539,6 +656,7 @@ def _render_messages(rows: list[ChatMessage]) -> list[FrontendChatMessage]:
                     role="assistant",
                     content=text,
                     hits=_parse_hits(row.hits_json),
+                    verification=_parse_verification(row.verification_json),
                     created_at=row.created_at,
                 )
             )

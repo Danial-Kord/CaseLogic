@@ -186,6 +186,11 @@ class ChatMessage(Base):
     in the same turn (the ones whose only purpose was to issue tool_use
     blocks) leave this NULL.
 
+    `verification_json` is set on the same final assistant row, alongside
+    `hits_json`. It stores the JSON-serialized `VerificationReport`
+    (citation + quote audit) so the frontend can re-render the warning
+    badge on chat reload without re-running the verifier.
+
     `role` is one of:
       - 'user'         — user-authored prompt
       - 'assistant'    — Claude's response (may contain text + tool_use blocks)
@@ -209,6 +214,7 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(16))
     content_json: Mapped[str] = mapped_column(Text)
     hits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verification_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

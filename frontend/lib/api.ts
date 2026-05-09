@@ -424,6 +424,28 @@ class ApiClient {
       await this.simulateLatency(160);
       onEvent({ type: "drafting" });
       const final = await this.sendChatMessage(chatId, request);
+      // Mirror the real backend's verifying/verified events even in
+      // mock mode so the UI's live trace renders identically offline.
+      // We synthesize a clean report whenever the assistant message
+      // doesn't already carry one (and pass the real one through when
+      // it does — useful once mock mode starts attaching reports).
+      await this.simulateLatency(140);
+      onEvent({ type: "verifying" });
+      const verification = final.assistant_message.verification;
+      const status = verification?.status ?? "skipped";
+      const unsupported = verification
+        ? verification.unsupported_citations.length +
+          verification.unsupported_quotes.length
+        : 0;
+      onEvent({
+        type: "verified",
+        status,
+        citations_total: verification?.citations_total ?? 0,
+        citations_supported: verification?.citations_supported ?? 0,
+        quotes_total: verification?.quotes_total ?? 0,
+        quotes_supported: verification?.quotes_supported ?? 0,
+        unsupported,
+      });
       onEvent({
         type: "final",
         user_message: final.user_message,
