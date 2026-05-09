@@ -45,4 +45,16 @@ export interface StatusResponse {
   indexed_count: number;
   jurisdictions: string[];
   last_ingest?: string;
+  // TODO: add once Person 4 exposes it on GET /status
+  eval_score?: number;
+}
+
+// GET /factors response
+export interface FactorCategory {
+  factor: string;
+  count: number;
+}
+
+export interface FactorsResponse {
+  factors: FactorCategory[];
 }

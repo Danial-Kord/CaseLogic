@@ -1,4 +1,4 @@
-import type { SearchRequest, SearchResponse, StatusResponse, StatuteResult } from "./types";
+import type { SearchRequest, SearchResponse, StatusResponse, StatuteResult, FactorsResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
@@ -46,6 +46,29 @@ const MOCK_STATUTES: StatuteResult[] = [
     score: 0.82,
   },
 ];
+
+// 17-factor taxonomy from eval-ca-vehicle-code.csv
+const MOCK_FACTORS: FactorsResponse = {
+  factors: [
+    { factor: "DUI/DWI", count: 3 },
+    { factor: "Failure to Yield the Right-of-Way", count: 5 },
+    { factor: "Improper Turning", count: 4 },
+    { factor: "Reckless Driving", count: 2 },
+    { factor: "Following Too Closely", count: 2 },
+    { factor: "Improper Passing", count: 5 },
+    { factor: "Failure to Maintain Lane", count: 3 },
+    { factor: "Improper Lane of Travel", count: 3 },
+    { factor: "Improper Stopping", count: 2 },
+    { factor: "Improper Starting", count: 1 },
+    { factor: "Driving Too Fast For Conditions", count: 3 },
+    { factor: "Failure to Obey Traffic Control Device", count: 4 },
+    { factor: "Failure to Yield at a Yield Sign", count: 2 },
+    { factor: "Fleeing a Police Officer", count: 1 },
+    { factor: "Fleeing the Scene of a Collision", count: 1 },
+    { factor: "Using a Wireless Telephone/Texting While Driving", count: 2 },
+    { factor: "Failure to Use/Activate Horn", count: 1 },
+  ],
+};
 
 function mockSearch(query: string): SearchResponse {
   const q = query.toLowerCase();
@@ -102,6 +125,36 @@ class ApiClient {
     if (!res.ok) {
       throw new Error(`Status check failed: ${res.status}`);
     }
+    return res.json();
+  }
+
+  // TODO: wire against GET /statutes/{citation} once Person 4's endpoint is live
+  async getStatute(citation: string): Promise<StatuteResult> {
+    if (this.mockMode) {
+      await this.simulateLatency(200);
+      const found = MOCK_STATUTES.find(
+        (s) => s.citation.toLowerCase() === citation.toLowerCase()
+      );
+      if (!found) throw new Error("Not found");
+      return found;
+    }
+
+    const encoded = encodeURIComponent(citation);
+    const res = await fetch(`${this.baseUrl}/statutes/${encoded}`);
+    if (res.status === 404) throw new Error("Not found");
+    if (!res.ok) throw new Error(`Statute lookup failed: ${res.status}`);
+    return res.json();
+  }
+
+  // TODO: wire against GET /factors once Person 4's endpoint is live
+  async getFactors(): Promise<FactorsResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(100);
+      return MOCK_FACTORS;
+    }
+
+    const res = await fetch(`${this.baseUrl}/factors`);
+    if (!res.ok) throw new Error(`Factors fetch failed: ${res.status}`);
     return res.json();
   }
 
