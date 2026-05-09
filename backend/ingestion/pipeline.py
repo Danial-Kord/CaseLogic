@@ -194,6 +194,9 @@ def ingest_ca_vehicle_code(
         except Exception as exc:
             failures.append(f"fetch {base}: {exc}")
             continue
+        if html is None:
+            failures.append(f"fetch {base}: section not found at leginfo")
+            continue
         rows_fetched += 1
 
         try:
@@ -254,3 +257,133 @@ def _read_csv_rows(csv_path: str) -> list[dict]:
     """Return all non-header rows from the eval CSV as plain dicts."""
     with open(csv_path, newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
+
+
+# ---------------------------------------------------------------------------
+# Division walk — ingest every section in a numeric range
+# ---------------------------------------------------------------------------
+
+# Ranges to walk for a full CA VEH ingest:
+#   Division 11   — Rules of the Road      [21000 – 23336]
+#   Division 11.5 — DUI Sentencing         [23500 – 23675]
+_CA_VEH_DIVISIONS: list[tuple[int, int]] = [
+    (21000, 23336),
+    (23500, 23675),
+]
+
+
+@dataclass
+class DivisionWalkReport:
+    sections_attempted: int
+    sections_found: int
+    sections_persisted: int
+    sections_skipped: int   # already in DB
+    sections_missing: int   # no content at leginfo
+    failures: list[str] = field(default_factory=list)
+
+
+def ingest_ca_vehicle_code_divisions(
+    divisions: list[tuple[int, int]] | None = None,
+    settings: Settings | None = None,
+    cache_dir: str | None = None,
+) -> DivisionWalkReport:
+    """Walk integer section numbers across CA VEH divisions and persist each found section.
+
+    For each integer N in the given ranges:
+      1. Check the in-memory set of already-persisted statute_ids (fast skip).
+      2. Fetch HTML from leginfo (or disk cache / .invalid marker).
+      3. If the section exists, parse and persist a Statute row.
+
+    Covers ~1,500 sections across Division 11 + 11.5. The first run takes
+    ~40 minutes at 1 req/sec; subsequent runs are near-instant from cache.
+    Sections already ingested via the CSV path are skipped cleanly.
+    """
+    from backend.ingestion.adapters.ca_statute import CaStatuteAdapter, make_statute_id
+    from backend.parsing.html_parse import parse_leginfo_section
+
+    if divisions is None:
+        divisions = _CA_VEH_DIVISIONS
+
+    settings = settings or load_settings()
+    adapter = CaStatuteAdapter(cache_dir=cache_dir) if cache_dir else CaStatuteAdapter()
+
+    # Load all existing statute_ids once to avoid per-section DB round-trips
+    with get_session() as session:
+        existing_ids: set[str] = set(session.scalars(select(Statute.statute_id)).all())
+
+    attempted = 0
+    found = 0
+    persisted = 0
+    skipped = 0
+    missing = 0
+    failures: list[str] = []
+
+    for start, end in divisions:
+        for n in range(start, end + 1):
+            sec_str = str(n)
+            attempted += 1
+            statute_id = make_statute_id("CA", "VEH", sec_str)
+
+            if statute_id in existing_ids:
+                skipped += 1
+                continue
+
+            url = adapter.section_url(sec_str)
+            try:
+                html = adapter.fetch_section_html(sec_str)
+            except Exception as exc:
+                failures.append(f"fetch § {sec_str}: {exc}")
+                continue
+
+            if html is None:
+                missing += 1
+                continue
+
+            found += 1
+
+            try:
+                parsed = parse_leginfo_section(html, url)
+            except Exception as exc:
+                failures.append(f"parse § {sec_str}: {exc}")
+                continue
+
+            if not parsed.get("statute_text"):
+                missing += 1
+                found -= 1
+                continue
+
+            statute = Statute(
+                statute_id=statute_id,
+                jurisdiction="CA",
+                code_name="VEH",
+                section_number=sec_str,
+                universal_citation=f"Cal. Veh. Code § {sec_str}",
+                subdivision="",
+                division=parsed.get("division"),
+                chapter=parsed.get("chapter"),
+                statute_text=parsed.get("statute_text"),
+                complete_statute=parsed.get("statute_text"),
+                official_url=url,
+                retrieved_at=datetime.now(timezone.utc),
+            )
+
+            try:
+                with get_session() as session:
+                    session.add(statute)
+                existing_ids.add(statute_id)
+                persisted += 1
+            except IntegrityError:
+                skipped += 1
+            except Exception as exc:
+                failures.append(f"persist § {sec_str}: {exc}")
+
+    adapter.close()
+
+    return DivisionWalkReport(
+        sections_attempted=attempted,
+        sections_found=found,
+        sections_persisted=persisted,
+        sections_skipped=skipped,
+        sections_missing=missing,
+        failures=failures,
+    )

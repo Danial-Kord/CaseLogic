@@ -120,10 +120,11 @@ class CaStatuteAdapter:
     def fetch(self, result: SearchResult) -> RawDocument:
         """Fetch one section URL. Writes raw HTML to the cache dir."""
         url = result.url
-        # Pull base section out of the URL query-string
         m = re.search(r"sectionNum=([^&]+)", url)
         base = m.group(1) if m else url
         html = self.fetch_section_html(base)
+        if html is None:
+            raise ValueError(f"§ {base} not found at leginfo (no section content in response)")
         cache_path = self._cache_path(base)
         return RawDocument(
             url=url,
@@ -143,22 +144,42 @@ class CaStatuteAdapter:
     def section_url(self, base: str) -> str:
         return _LEGINFO_TEMPLATE.format(code=self._law_code, section=base)
 
-    def fetch_section_html(self, base: str) -> str:
-        """Return HTML for a section, serving from disk cache when available."""
+    def fetch_section_html(self, base: str) -> str | None:
+        """Return HTML for a section, or None if it doesn't exist at leginfo.
+
+        On-disk caching:
+          • VEH_{base}.html    — valid section (served on every subsequent call)
+          • VEH_{base}.invalid — empty marker for non-existent sections (skips HTTP)
+        """
         cache = self._cache_path(base)
         if cache.exists():
             log.debug("cache hit: %s", cache.name)
             return cache.read_text(encoding="utf-8")
 
+        invalid_marker = self._invalid_path(base)
+        if invalid_marker.exists():
+            log.debug("known missing: § %s", base)
+            return None
+
         url = self.section_url(base)
         log.info("fetching %s", url)
         html = self._fetch_with_retry(url)
+
+        if not _section_exists(html):
+            log.debug("§ %s — no section content at leginfo", base)
+            invalid_marker.write_text("", encoding="utf-8")
+            return None
+
         cache.write_text(html, encoding="utf-8")
         return html
 
     def _cache_path(self, base: str) -> Path:
         safe = re.sub(r"[^a-zA-Z0-9._-]", "_", base)
         return self._cache_dir / f"{self._law_code}_{safe}.html"
+
+    def _invalid_path(self, base: str) -> Path:
+        safe = re.sub(r"[^a-zA-Z0-9._-]", "_", base)
+        return self._cache_dir / f"{self._law_code}_{safe}.invalid"
 
     def _fetch_with_retry(self, url: str) -> str:
         backoff = 2.0
@@ -193,6 +214,19 @@ class CaStatuteAdapter:
 
     def close(self) -> None:
         self._client.close()
+
+
+# ------------------------------------------------------------------
+# Internal helpers
+# ------------------------------------------------------------------
+
+def _section_exists(html: str) -> bool:
+    """Return True if the leginfo response contains an actual section.
+
+    leginfo omits id="codeLawSectionNoHead" entirely when a section number
+    doesn't exist in the code, so this string check is sufficient.
+    """
+    return 'id="codeLawSectionNoHead"' in html
 
 
 # ------------------------------------------------------------------
