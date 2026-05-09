@@ -4,6 +4,7 @@ import type {
   FactorsResponse,
   JurisdictionsResponse,
   MatchedVia,
+  Profile,
   SearchRequest,
   SearchResponse,
   SendMessageRequest,
@@ -365,6 +366,30 @@ class ApiClient {
       },
     );
     if (!res.ok) throw new Error(`Send message failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ----- Profile (single-user demo) ---------------------------------------
+
+  async getProfile(): Promise<Profile> {
+    if (this.mockMode) {
+      return { name: "", role: "", firm: "", about: "", updated_at: null };
+    }
+    const res = await fetch(`${this.baseUrl}/profile`);
+    if (!res.ok) throw new Error(`Get profile failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateProfile(profile: Omit<Profile, "updated_at">): Promise<Profile> {
+    if (this.mockMode) {
+      return { ...profile, updated_at: new Date().toISOString() };
+    }
+    const res = await fetch(`${this.baseUrl}/profile`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+    if (!res.ok) throw new Error(`Update profile failed: ${res.status}`);
     return res.json();
   }
 
