@@ -12,7 +12,7 @@ export default function FactorChips({ factors }: FactorChipsProps) {
       {factors.map((f) => (
         <span
           key={f}
-          className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-brand-accent"
+          className="rounded-full bg-brand-accent/10 px-2 py-0.5 text-xs font-medium text-brand-accent"
         >
           {f}
         </span>

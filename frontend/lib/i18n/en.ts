@@ -35,6 +35,15 @@ export const strings = {
     resultCount: (n: number, query: string) =>
       `${n} result${n !== 1 ? "s" : ""} for "${query}"`,
     leginfoLink: "Open on leginfo →",
+    col: {
+      citation: "Citation",
+      section: "Section",
+      division: "Division",
+      score: "Score",
+      matchedVia: "Match",
+      factors: "Factors",
+      snippet: "Snippet",
+    },
   },
 
   matchedVia: {

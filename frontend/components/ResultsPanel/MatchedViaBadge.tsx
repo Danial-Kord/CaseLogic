@@ -7,7 +7,7 @@ import type { MatchedVia } from "@/lib/types";
 const BG_BY_MATCHED_VIA: Record<MatchedVia, string> = {
   citation: "bg-brand-verified text-white",
   hybrid: "bg-brand-accent text-white",
-  vector: "bg-purple-600 text-white",
+  vector: "bg-indigo-500 text-white",
   keyword: "bg-brand-muted text-white",
 };
 
