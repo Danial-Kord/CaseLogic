@@ -7,6 +7,7 @@ import type { StatuteDetail } from "@/lib/types";
 import FactorChips from "../shared/FactorChips";
 import StatuteMetadata from "./StatuteMetadata";
 import SourceProvenance from "./SourceProvenance";
+import StatuteText from "./StatuteText";
 
 interface SourceViewerProps {
   statuteId: string | null;
@@ -16,6 +17,7 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
   const [statute, setStatute] = useState<StatuteDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!statuteId) {
@@ -33,6 +35,14 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
       .catch(() => setError(strings.sourceViewer.notFound))
       .finally(() => setIsLoading(false));
   }, [statuteId]);
+
+  // Reset the "Copied!" indicator a second after the user copies the
+  // citation; keeps the button feeling responsive without a portal.
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(t);
+  }, [copied]);
 
   if (!statuteId) {
     return (
@@ -60,48 +70,84 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
     statute.complete_statute &&
     statute.complete_statute !== statute.statute_text;
 
+  async function handleCopyCitation() {
+    if (!statute) return;
+    try {
+      await navigator.clipboard.writeText(statute.universal_citation);
+      setCopied(true);
+    } catch {
+      // Clipboard can fail in non-secure contexts; silently noop — the
+      // user can still highlight the citation manually.
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-3">
-      <p className="font-mono text-sm font-semibold text-brand-primary">
-        {statute.universal_citation}
-      </p>
+    <article className="flex flex-col gap-5">
+      <header className="flex flex-col gap-2 border-b border-brand-border pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-brand-muted">
+              {statute.jurisdiction}
+            </p>
+            <h2 className="mt-0.5 break-words font-mono text-lg font-semibold leading-snug text-brand-primary">
+              {statute.universal_citation}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyCitation}
+            className="shrink-0 rounded-md border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-muted transition-colors hover:border-brand-accent hover:text-brand-accent"
+          >
+            {copied
+              ? strings.sourceViewer.copied
+              : strings.sourceViewer.copyCitation}
+          </button>
+        </div>
+        <StatuteMetadata statute={statute} />
+      </header>
 
-      <StatuteMetadata statute={statute} />
-
-      <p className="whitespace-pre-wrap text-sm text-brand-secondary leading-relaxed">
-        {statute.statute_text}
-      </p>
+      <section>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-brand-muted">
+          {strings.sourceViewer.statutoryText}
+        </p>
+        <StatuteText text={statute.statute_text} />
+      </section>
 
       {showFullContext && (
-        <details className="text-xs text-brand-muted">
-          <summary className="cursor-pointer hover:text-brand-accent">
+        <details className="group rounded-lg border border-brand-border bg-brand-bg/40 px-3 py-2 text-sm">
+          <summary className="cursor-pointer list-none text-xs font-medium text-brand-muted transition-colors hover:text-brand-accent">
+            <span className="mr-1 inline-block transition-transform group-open:rotate-90">
+              ›
+            </span>
             {strings.sourceViewer.showFullContext}
           </summary>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-brand-secondary leading-relaxed">
-            {statute.complete_statute}
-          </p>
+          <div className="mt-3">
+            <StatuteText text={statute.complete_statute ?? ""} />
+          </div>
         </details>
       )}
 
       {statute.factors.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-brand-muted mb-1">
+        <section>
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-brand-muted">
             {strings.sourceViewer.contributingFactors}
           </p>
           <FactorChips factors={statute.factors} />
-        </div>
+        </section>
       )}
 
-      <a
-        href={statute.official_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-xs text-brand-accent hover:underline"
-      >
-        {strings.sourceViewer.leginfoLink}
-      </a>
-
-      <SourceProvenance url={statute.official_url} />
-    </div>
+      <footer className="flex flex-col gap-2 border-t border-brand-border pt-4">
+        <a
+          href={statute.official_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-accent hover:underline"
+        >
+          {strings.sourceViewer.leginfoLink}
+          <span aria-hidden="true">→</span>
+        </a>
+        <SourceProvenance url={statute.official_url} />
+      </footer>
+    </article>
   );
 }

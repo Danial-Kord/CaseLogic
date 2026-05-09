@@ -204,4 +204,43 @@ describe("ResultsPanel", () => {
     );
     expect(screen.getByText("Short statute text.")).toBeInTheDocument();
   });
+
+  it("highlights legal terms-of-art inside the snippet preview", () => {
+    const { container } = render(
+      <ResultsPanel
+        results={MOCK_RESULTS}
+        isLoading={false}
+        query="reckless driving"
+        onSelect={jest.fn()}
+      />
+    );
+    // Hit #2's snippet contains "willful or wanton disregard" and
+    // "is guilty of" — both should now be wrapped in <mark>.
+    const marks = container.querySelectorAll("mark");
+    const texts = Array.from(marks).map((m) => m.textContent);
+    expect(texts).toContain("willful or wanton disregard");
+    expect(texts).toContain("is guilty of");
+  });
+
+  it("renders cross-reference chips inside the snippet preview", () => {
+    const withRef = makeHit({
+      statute_id: "ca-veh-23153-a",
+      universal_citation: "Cal. Veh. Code § 23153(a)",
+      statute_text:
+        'Pursuant to Cal. Veh. Code § 23153(a), the operator is liable.',
+    });
+    const { container } = render(
+      <ResultsPanel
+        results={[withRef]}
+        isLoading={false}
+        query="liability"
+        onSelect={jest.fn()}
+      />
+    );
+    const refs = container.querySelectorAll(
+      'span[title="Cross-reference to another statute"]',
+    );
+    expect(refs.length).toBe(1);
+    expect(refs[0].textContent).toBe("Cal. Veh. Code § 23153(a)");
+  });
 });

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { strings } from "@/lib/i18n/en";
 import type { MatchedVia, StatuteHit } from "@/lib/types";
 import FactorChips from "../shared/FactorChips";
+import { highlightLegal } from "../SourceViewer/highlightLegal";
 import MatchedViaBadge from "./MatchedViaBadge";
 
 const TRUNCATE_AT = 280;
@@ -266,7 +267,9 @@ export default function ResultsPanel({
                     <FactorChips factors={r.factors} />
                   </td>
                   <td className="px-2 py-2 text-sm text-brand-secondary">
-                    <span className="line-clamp-2">{truncated}</span>
+                    <span className="line-clamp-2 leading-relaxed">
+                      {highlightLegal(truncated)}
+                    </span>
                   </td>
                 </tr>
               );

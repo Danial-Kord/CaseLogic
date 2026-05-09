@@ -80,6 +80,11 @@ export const strings = {
     contributingFactors: "Contributing factors",
     leginfoLink: "Open on leginfo →",
     source: "Source",
+    statutoryText: "Statutory text",
+    legislativeHistory: "Legislative history",
+    copyCitation: "Copy citation",
+    copied: "Copied!",
+    crossRefTooltip: "Cross-reference to another statute",
   },
 
   datasetStatus: {

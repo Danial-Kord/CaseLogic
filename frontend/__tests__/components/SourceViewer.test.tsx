@@ -56,8 +56,11 @@ describe("SourceViewer", () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
     render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => {
+      // The citation is rendered as the <h2> heading. The same string can
+      // also appear as an inline cross-reference chip inside the full-context
+      // disclosure, so query by role to disambiguate.
       expect(
-        screen.getByText("Cal. Veh. Code § 23152(a)")
+        screen.getByRole("heading", { name: "Cal. Veh. Code § 23152(a)" })
       ).toBeInTheDocument();
       expect(screen.getByText(MOCK_STATUTE.statute_text)).toBeInTheDocument();
       expect(screen.getByText("DUI/DWI")).toBeInTheDocument();
@@ -131,7 +134,7 @@ describe("SourceViewer", () => {
     jest.mocked(api.getStatute).mockResolvedValueOnce(second);
     rerender(<SourceViewer statuteId="ca-veh-23103-a" />);
     await waitFor(() =>
-      screen.getByText("Cal. Veh. Code § 23103(a)")
+      screen.getByRole("heading", { name: "Cal. Veh. Code § 23103(a)" })
     );
     expect(jest.mocked(api.getStatute)).toHaveBeenCalledTimes(2);
   });
