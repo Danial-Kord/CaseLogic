@@ -147,7 +147,7 @@ export default function ChatPanel({ onSendMessage }: ChatPanelProps) {
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="px-4 py-2 rounded-lg bg-brand-accent text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-2 rounded-full bg-brand-accent text-white font-medium text-sm hover:bg-brand-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? (
               <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

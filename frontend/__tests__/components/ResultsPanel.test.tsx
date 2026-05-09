@@ -132,7 +132,7 @@ describe("ResultsPanel", () => {
     expect(screen.getByText("semantic")).toBeInTheDocument();
   });
 
-  it("renders an 'Open on leginfo' link on each card pointing to official_url", () => {
+  it("renders a leginfo link on each row pointing to official_url", () => {
     render(
       <ResultsPanel
         results={MOCK_RESULTS}
@@ -141,7 +141,7 @@ describe("ResultsPanel", () => {
         onSelect={jest.fn()}
       />
     );
-    const links = screen.getAllByRole("link", { name: /open on leginfo/i });
+    const links = screen.getAllByRole("link");
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute("href", MOCK_RESULTS[0].official_url);
     expect(links[1]).toHaveAttribute("href", MOCK_RESULTS[1].official_url);
@@ -171,9 +171,12 @@ describe("ResultsPanel", () => {
         selectedStatuteId="ca-veh-23152-a"
       />
     );
-    const cards = screen.getAllByRole("button");
-    expect(cards[0]).toHaveClass("border-brand-accent");
-    expect(cards[1]).not.toHaveClass("border-brand-accent");
+    const rows = screen
+      .getAllByRole("button")
+      .filter((el) => el.tagName === "TR");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveClass("border-brand-accent");
+    expect(rows[1]).not.toHaveClass("border-brand-accent");
   });
 
   it("truncates statute text longer than 280 characters with an ellipsis", () => {
