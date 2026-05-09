@@ -61,6 +61,13 @@ class Settings:
     # Safety bound on the inner tool-use loop. Each agent turn calls Claude at
     # most this many times before we force a final response.
     chat_max_steps: int = 6
+    # Citation + quote verification layer. Off by default so it doesn't run
+    # on every turn; flip on with VERIFICATION_ENABLED=1 (or "true") to
+    # have run_agent_turn audit the assistant's answer against retrieved
+    # evidence and surface a "Sources verified / Needs review" badge in the
+    # chat UI. Code path stays in place either way — toggling is a one-line
+    # change so we can demo it on cue.
+    verification_enabled: bool = False
     firecrawl_api_key: str = ""
     firecrawl_allowed_domains: tuple[str, ...] = DEFAULT_FIRECRAWL_ALLOWED_DOMAINS
 
@@ -72,6 +79,13 @@ def _parse_allowed_domains(raw: str | None) -> tuple[str, ...]:
     return tuple(parts) or DEFAULT_FIRECRAWL_ALLOWED_DOMAINS
 
 
+def _parse_bool(raw: str | None, *, default: bool) -> bool:
+    """Truthy/falsy parser for env-var feature flags."""
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_settings() -> Settings:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     database_url = os.environ.get("DATABASE_URL", f"sqlite:///{REPO_ROOT / 'app.db'}")
@@ -79,6 +93,9 @@ def load_settings() -> Settings:
     chat_model = os.environ.get("CHAT_MODEL") or "claude-sonnet-4-6"
     chat_history_cap = int(os.environ.get("CHAT_HISTORY_CAP", "30"))
     chat_max_steps = int(os.environ.get("CHAT_MAX_STEPS", "6"))
+    verification_enabled = _parse_bool(
+        os.environ.get("VERIFICATION_ENABLED"), default=False
+    )
     firecrawl_api_key = os.environ.get("FIRECRAWL_API_KEY", "")
     firecrawl_allowed_domains = _parse_allowed_domains(
         os.environ.get("FIRECRAWL_ALLOWED_DOMAINS")
@@ -90,6 +107,7 @@ def load_settings() -> Settings:
         chat_model=chat_model,
         chat_history_cap=chat_history_cap,
         chat_max_steps=chat_max_steps,
+        verification_enabled=verification_enabled,
         firecrawl_api_key=firecrawl_api_key,
         firecrawl_allowed_domains=firecrawl_allowed_domains,
     )

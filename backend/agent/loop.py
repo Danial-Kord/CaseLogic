@@ -348,30 +348,35 @@ def run_agent_turn(
     # the evidence we actually retrieved this turn. Result is attached to
     # the turn and surfaced through the API; the verifier never rewrites
     # the assistant's text (we flag, the user decides).
+    #
+    # Gated by `settings.verification_enabled` (env var VERIFICATION_ENABLED).
+    # Off by default — flip on for demo / when the team wants the badge.
     deduped_statute_hits = _dedupe_statutes(statute_hits)
     deduped_web_hits = _dedupe_web(web_hits)
 
-    emit("verifying", {})
-    verification = _run_verifier(
-        db=db,
-        answer_text=final_text,
-        statute_hits=deduped_statute_hits,
-        web_hits=deduped_web_hits,
-    )
-    emit(
-        "verified",
-        {
-            "status": verification.status,
-            "citations_total": verification.citations_total,
-            "citations_supported": verification.citations_supported,
-            "quotes_total": verification.quotes_total,
-            "quotes_supported": verification.quotes_supported,
-            "unsupported": (
-                len(verification.unsupported_citations)
-                + len(verification.unsupported_quotes)
-            ),
-        },
-    )
+    verification: VerificationReport | None = None
+    if s.verification_enabled:
+        emit("verifying", {})
+        verification = _run_verifier(
+            db=db,
+            answer_text=final_text,
+            statute_hits=deduped_statute_hits,
+            web_hits=deduped_web_hits,
+        )
+        emit(
+            "verified",
+            {
+                "status": verification.status,
+                "citations_total": verification.citations_total,
+                "citations_supported": verification.citations_supported,
+                "quotes_total": verification.quotes_total,
+                "quotes_supported": verification.quotes_supported,
+                "unsupported": (
+                    len(verification.unsupported_citations)
+                    + len(verification.unsupported_quotes)
+                ),
+            },
+        )
 
     # --- 6. Auto-title and bump updated_at
     title = _autotitle(user_message) if is_first_turn else None
