@@ -2,6 +2,7 @@ import type {
   ChatDetail,
   ChatListResponse,
   FactorsResponse,
+  JurisdictionsResponse,
   MatchedVia,
   SearchRequest,
   SearchResponse,
@@ -159,11 +160,14 @@ function mockSearch(request: SearchRequest): SearchResponse {
       s.statute_text.toLowerCase().includes(q) ||
       s.factors.some((f) => f.toLowerCase().includes(q));
     const matchesFactor = !request.factor || s.factors.includes(request.factor);
-    return matchesText && matchesFactor;
+    const matchesJurisdiction =
+      !request.jurisdiction || s.jurisdiction === request.jurisdiction;
+    return matchesText && matchesFactor && matchesJurisdiction;
   });
   return {
     query: request.query,
     factor: request.factor ?? null,
+    jurisdiction: request.jurisdiction ?? null,
     top_k,
     results: filtered
       .slice(0, top_k)
@@ -237,6 +241,21 @@ class ApiClient {
 
     const res = await fetch(`${this.baseUrl}/factors`);
     if (!res.ok) throw new Error(`Factors fetch failed: ${res.status}`);
+    return res.json();
+  }
+
+  async getJurisdictions(): Promise<JurisdictionsResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(100);
+      return {
+        jurisdictions: [{ jurisdiction: "CA", statute_count: 41 }],
+      };
+    }
+
+    const res = await fetch(`${this.baseUrl}/jurisdictions`);
+    if (!res.ok) {
+      throw new Error(`Jurisdictions fetch failed: ${res.status}`);
+    }
     return res.json();
   }
 

@@ -5,6 +5,7 @@ import { strings } from "@/lib/i18n/en";
 import type { SearchRequest } from "@/lib/types";
 import QueryTextarea from "./QueryTextarea";
 import FactorDropdown from "./FactorDropdown";
+import JurisdictionDropdown from "./JurisdictionDropdown";
 
 interface SearchPanelProps {
   onSearch: (request: SearchRequest) => void;
@@ -14,6 +15,7 @@ interface SearchPanelProps {
 export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
   const [query, setQuery] = useState("");
   const [factor, setFactor] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("");
 
   function submit() {
     const trimmed = query.trim();
@@ -21,6 +23,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
     onSearch({
       query: trimmed,
       factor: factor || undefined,
+      jurisdiction: jurisdiction || undefined,
       top_k: 10,
     });
   }
@@ -34,6 +37,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       className="flex flex-col gap-4"
     >
       <QueryTextarea value={query} onChange={setQuery} onSubmit={submit} />
+      <JurisdictionDropdown value={jurisdiction} onChange={setJurisdiction} />
       <FactorDropdown value={factor} onChange={setFactor} />
       <button
         type="submit"

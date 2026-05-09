@@ -24,8 +24,22 @@ export const strings = {
     factorLabel: "Contributing factor",
     factorAll: "All factors",
     factorsError: "Could not load factors from backend.",
+    jurisdictionLabel: "Jurisdiction",
+    jurisdictionAll: "All states",
+    jurisdictionsError: "Could not load jurisdictions from backend.",
     submit: "Search",
     submitting: "Searching…",
+  },
+
+  jurisdiction: {
+    // Display labels for the two-letter codes the API returns. Unknown codes
+    // fall back to the code itself.
+    labels: {
+      CA: "California",
+      FL: "Florida",
+      WA: "Washington",
+      NY: "New York",
+    } as Record<string, string>,
   },
 
   resultsPanel: {

@@ -4,6 +4,7 @@
 export interface SearchRequest {
   query: string;
   factor?: string;
+  jurisdiction?: string;
   top_k?: number;
 }
 
@@ -29,6 +30,7 @@ export interface StatuteHit {
 export interface SearchResponse {
   query: string;
   factor: string | null;
+  jurisdiction: string | null;
   top_k: number;
   results: StatuteHit[];
 }
@@ -56,6 +58,15 @@ export interface FactorCount {
 
 export interface FactorsResponse {
   factors: FactorCount[];
+}
+
+export interface JurisdictionCount {
+  jurisdiction: string;
+  statute_count: number;
+}
+
+export interface JurisdictionsResponse {
+  jurisdictions: JurisdictionCount[];
 }
 
 export interface StatusResponse {
