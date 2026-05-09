@@ -44,7 +44,7 @@ describe("SearchPanel", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("calls onSearch with query and top_k on submit", async () => {
+  it("calls onSearch with flat {query, factor, top_k} on submit", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);

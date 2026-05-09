@@ -2,43 +2,41 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import ResultsPanel from "@/components/ResultsPanel";
 import type { StatuteHit } from "@/lib/types";
 
-const MOCK_RESULTS: StatuteHit[] = [
-  {
+function makeHit(overrides: Partial<StatuteHit> = {}): StatuteHit {
+  return {
     statute_id: "ca-veh-23152-a",
     universal_citation: "Cal. Veh. Code § 23152(a)",
     jurisdiction: "California",
     code_name: "Cal. Veh. Code",
     section_number: "23152",
     subdivision: "a",
-    division: null,
-    chapter: null,
+    division: "Division 11",
+    chapter: "Chapter 12",
     statute_text:
       "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
-    complete_statute: "",
+    complete_statute: "Pursuant to Cal. Veh. Code § 23152(a)…",
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
     factors: ["DUI/DWI"],
     score: 0.95,
-    matched_via: "vector",
-  },
-  {
+    matched_via: "hybrid",
+    ...overrides,
+  };
+}
+
+const MOCK_RESULTS: StatuteHit[] = [
+  makeHit(),
+  makeHit({
     statute_id: "ca-veh-23103-a",
     universal_citation: "Cal. Veh. Code § 23103(a)",
-    jurisdiction: "California",
-    code_name: "Cal. Veh. Code",
     section_number: "23103",
-    subdivision: "a",
-    division: null,
-    chapter: null,
     statute_text:
       "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
-    complete_statute: "",
+    factors: ["Reckless Driving"],
+    matched_via: "vector",
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23103",
-    factors: ["Reckless Driving"],
-    score: 0.92,
-    matched_via: "keyword",
-  },
+  }),
 ];
 
 describe("ResultsPanel", () => {
@@ -79,7 +77,7 @@ describe("ResultsPanel", () => {
     expect(screen.getByText(/zebra law/i)).toBeInTheDocument();
   });
 
-  it("renders a card per result with its universal_citation", () => {
+  it("renders a card per result with universal_citation as the header", () => {
     render(
       <ResultsPanel
         results={MOCK_RESULTS}
@@ -121,6 +119,19 @@ describe("ResultsPanel", () => {
     expect(screen.getByText("Reckless Driving")).toBeInTheDocument();
   });
 
+  it("renders a matched_via badge on each card with the appropriate label", () => {
+    render(
+      <ResultsPanel
+        results={MOCK_RESULTS}
+        isLoading={false}
+        query="driving"
+        onSelect={jest.fn()}
+      />
+    );
+    expect(screen.getByText("hybrid")).toBeInTheDocument();
+    expect(screen.getByText("semantic")).toBeInTheDocument();
+  });
+
   it("renders an 'Open on leginfo' link on each card pointing to official_url", () => {
     render(
       <ResultsPanel
@@ -150,7 +161,7 @@ describe("ResultsPanel", () => {
     expect(onSelect).toHaveBeenCalledWith(MOCK_RESULTS[0]);
   });
 
-  it("applies selected border styling to the active card only", () => {
+  it("applies selected border styling using statute_id as the key", () => {
     render(
       <ResultsPanel
         results={MOCK_RESULTS}
@@ -166,11 +177,10 @@ describe("ResultsPanel", () => {
   });
 
   it("truncates statute text longer than 280 characters with an ellipsis", () => {
-    const longText = "a".repeat(400);
-    const result: StatuteHit = { ...MOCK_RESULTS[0], statute_text: longText };
+    const long = makeHit({ statute_text: "a".repeat(400) });
     render(
       <ResultsPanel
-        results={[result]}
+        results={[long]}
         isLoading={false}
         query="a"
         onSelect={jest.fn()}
@@ -180,29 +190,15 @@ describe("ResultsPanel", () => {
   });
 
   it("does not truncate statute text at or under 280 characters", () => {
-    const shortText = "Short statute text.";
-    const result: StatuteHit = { ...MOCK_RESULTS[0], statute_text: shortText };
+    const short = makeHit({ statute_text: "Short statute text." });
     render(
       <ResultsPanel
-        results={[result]}
+        results={[short]}
         isLoading={false}
         query="short"
         onSelect={jest.fn()}
       />
     );
     expect(screen.getByText("Short statute text.")).toBeInTheDocument();
-  });
-
-  it("renders matched_via badge on each card", () => {
-    render(
-      <ResultsPanel
-        results={MOCK_RESULTS}
-        isLoading={false}
-        query="driving"
-        onSelect={jest.fn()}
-      />
-    );
-    expect(screen.getByText("vector")).toBeInTheDocument();
-    expect(screen.getByText("keyword")).toBeInTheDocument();
   });
 });
