@@ -5,7 +5,12 @@
       "Bash(curl -s -o /dev/null -w \"frontend: %{http_code}\\\\n\" http://localhost:3000)",
       "Bash(curl -s -o /dev/null -w \"backend:  %{http_code}\\\\n\" http://localhost:8000/healthz)",
       "Bash(npm run *)",
-      "Bash(.venv/bin/uvicorn backend.main:app --reload)"
+      "Bash(.venv/bin/uvicorn backend.main:app --reload)",
+      "Bash(npx jest *)",
+      "Bash(xargs ls -la)",
+      "Bash(.venv/bin/python *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('chat:', d['chat_id'], '|', d['title']\\); print\\('messages:', len\\(d['messages']\\)\\); print\\('first msg:', d['messages'][0]['role'], '-', d['messages'][0]['content'][:50]\\)\")"
     ]
   }
 }
