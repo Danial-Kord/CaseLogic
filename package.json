@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
-    "dev": "echo \"frontend toolchain not yet initialized\" && exit 1"
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix frontend run typecheck"
   }
 }
