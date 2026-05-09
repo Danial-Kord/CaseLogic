@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm --version)"
+      "Bash(npm --version)",
+      "Bash(curl -s -o /dev/null -w \"frontend: %{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"backend:  %{http_code}\\\\n\" http://localhost:8000/healthz)",
+      "Bash(npm run *)",
+      "Bash(.venv/bin/uvicorn backend.main:app --reload)"
     ]
   }
 }
