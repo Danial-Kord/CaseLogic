@@ -71,6 +71,10 @@ def make_statute_id(
     Phase 1 only handles California Vehicle Code; the slug shape is
     `ca-veh-{section}` or `ca-veh-{section}-{subdivision}`. When more
     jurisdictions land in Phase 2 we'll extend the mapping.
+
+    Section numbers are sanitized to `[a-z0-9-]+` so decimals like
+    `2800.1` become `2800-1` — required to keep the API's
+    `^[a-z0-9-]+$` slug regex valid for every row in the table.
     """
 
     j = jurisdiction.strip().lower()
@@ -85,8 +89,10 @@ def make_statute_id(
     else:
         code_slug = re.sub(r"[^a-z0-9]+", "-", code).strip("-") or "code"
 
+    section_slug = re.sub(r"[^a-z0-9]+", "-", section_number.lower()).strip("-")
+
     sub = normalize_subdivision(subdivision)
-    base = f"{jurisdiction_slug}-{code_slug}-{section_number}"
+    base = f"{jurisdiction_slug}-{code_slug}-{section_slug}"
     return f"{base}-{sub}" if sub else base
 
 

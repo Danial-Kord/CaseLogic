@@ -25,7 +25,12 @@ def make_contextual_text(statute: Statute) -> str:
 
     section_label = statute.section_number
     if statute.subdivision:
-        section_label = f"{section_label}({statute.subdivision})"
+        # Strip any wrapping parens before re-wrapping so older ingest
+        # data that stored "(a)" doesn't render as "21453((a))" in the
+        # embedded text. New ingests already store the bare letter.
+        sub = statute.subdivision.strip().strip("()")
+        if sub:
+            section_label = f"{section_label}({sub})"
 
     location_parts = [p for p in (statute.division, statute.chapter) if p]
     location_clause = f" [{'; '.join(location_parts)}]" if location_parts else ""
