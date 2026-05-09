@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { strings } from "@/lib/i18n/en";
 import type { MatchedVia, StatuteHit } from "@/lib/types";
+import BookmarkButton from "../BookmarkButton";
 import FactorChips from "../shared/FactorChips";
 import { highlightLegal } from "../SourceViewer/highlightLegal";
 import MatchedViaBadge from "./MatchedViaBadge";
@@ -139,8 +140,9 @@ export default function ResultsPanel({
         {strings.resultsPanel.resultCount(results.length, query)}
       </p>
       <div className="overflow-x-auto rounded border border-brand-border">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="w-full min-w-[860px] border-collapse text-sm">
           <colgroup>
+            <col className="w-[2.75rem]" />
             <col className="w-[3.5rem]" />
             <col className="w-[14rem]" />
             <col className="w-[5rem]" />
@@ -152,6 +154,12 @@ export default function ResultsPanel({
           </colgroup>
           <thead className="bg-brand-surface text-left text-[11px] uppercase tracking-wide text-brand-muted">
             <tr>
+              <th
+                scope="col"
+                className="w-11 px-0 py-2 text-center font-medium"
+              >
+                <span className="sr-only">{cols.bookmark}</span>
+              </th>
               <SortableHeader
                 label={cols.state}
                 keyName="state"
@@ -226,6 +234,9 @@ export default function ResultsPanel({
                       : "border-brand-border"
                   }`}
                 >
+                  <td className="px-0 py-2 text-center align-middle">
+                    <BookmarkButton hit={r} />
+                  </td>
                   <td className="px-2 py-2">
                     <span
                       title={

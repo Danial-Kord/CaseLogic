@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
+import MarkdownContent from "@/components/MarkdownContent";
 import type { Message } from "@/lib/types";
 
 function generateId(): string {
@@ -182,8 +183,8 @@ function MessageBubble({ message }: { message: Message }) {
             <span>Searching...</span>
           </div>
         ) : (
-          <div className="text-sm whitespace-pre-wrap">
-            <FormattedContent content={message.content} />
+          <div className="text-sm">
+            <MarkdownContent content={message.content} />
           </div>
         )}
         {message.sources && message.sources.length > 0 && (
@@ -209,53 +210,3 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
-function FormattedContent({ content }: { content: string }) {
-  // Basic markdown-like formatting
-  const lines = content.split("\n");
-
-  return (
-    <>
-      {lines.map((line, i) => {
-        // Horizontal rule: ---
-        if (line.trim() === "---") {
-          return <hr key={i} className="my-3 border-brand-border" />;
-        }
-
-        // Bold text: **text** and links: [text](url)
-        const parts = line.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
-        const formatted = parts.map((part, j) => {
-          if (part.startsWith("**") && part.endsWith("**")) {
-            return (
-              <strong key={j} className="font-semibold">
-                {part.slice(2, -2)}
-              </strong>
-            );
-          }
-          const linkMatch = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
-          if (linkMatch) {
-            const [, text, url] = linkMatch;
-            return (
-              <a
-                key={j}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-accent hover:underline"
-              >
-                {text}
-              </a>
-            );
-          }
-          return part;
-        });
-
-        return (
-          <span key={i}>
-            {formatted}
-            {i < lines.length - 1 && <br />}
-          </span>
-        );
-      })}
-    </>
-  );
-}

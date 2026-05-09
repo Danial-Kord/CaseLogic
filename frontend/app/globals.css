@@ -2,7 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Brand palette is exposed as RGB-channel triplets so Tailwind's modern
+ * alpha syntax (`bg-brand-accent/5`) keeps working. Each variable holds
+ * three space-separated 0-255 channels — never an `rgb()` wrapper.
+ *
+ * To switch themes, flip the variables on `.dark` (added to <html>).
+ * Most components just use `bg-brand-bg`, `text-brand-primary`, etc., so
+ * they auto-flip without dark: prefixes.
+ */
 @layer base {
+  :root {
+    --color-brand-bg: 248 250 252;
+    --color-brand-surface: 255 255 255;
+    --color-brand-primary: 15 23 42;
+    --color-brand-secondary: 51 65 85;
+    --color-brand-muted: 100 116 139;
+    --color-brand-border: 226 232 240;
+    --color-brand-accent: 67 107 245;
+    --color-brand-accent-hover: 27 81 243;
+    --color-brand-verified: 22 163 74;
+    --color-brand-warning: 217 119 6;
+    --color-brand-error: 220 38 38;
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --color-brand-bg: 11 18 32;
+    --color-brand-surface: 17 27 47;
+    --color-brand-primary: 241 245 249;
+    --color-brand-secondary: 203 213 225;
+    --color-brand-muted: 148 163 184;
+    --color-brand-border: 30 41 59;
+    /* Accent kept identical to light so white-on-accent buttons keep
+       their contrast ratio; only the surface around it changes. */
+    --color-brand-accent: 79 117 246;
+    --color-brand-accent-hover: 110 142 248;
+    --color-brand-verified: 52 211 153;
+    --color-brand-warning: 251 191 36;
+    --color-brand-error: 248 113 113;
+
+    color-scheme: dark;
+  }
+
+  body {
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
   h1,
   h2,
   h3 {

@@ -7,6 +7,7 @@ import type {
   StatuteHit,
   ThinkingStep,
 } from "@/lib/types";
+import MarkdownContent from "./MarkdownContent";
 import ResultsPanel from "./ResultsPanel";
 
 interface ChatThreadProps {
@@ -138,8 +139,8 @@ function MessageBubble({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="max-w-none text-sm leading-relaxed text-brand-secondary">
-        <FormattedContent content={message.content} />
+      <div className="max-w-none text-brand-secondary">
+        <MarkdownContent content={message.content} />
       </div>
 
       {message.hits.length > 0 && (
@@ -302,57 +303,3 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
   );
 }
 
-// Light markdown-ish renderer for assistant prose: bold, links, paragraphs.
-function FormattedContent({ content }: { content: string }) {
-  const blocks = content.split(/\n\n+/);
-  return (
-    <>
-      {blocks.map((block, bi) => {
-        const lines = block.split("\n");
-        return (
-          <p key={bi} className="mb-3 last:mb-0">
-            {lines.map((line, li) => (
-              <span key={li}>
-                <FormatInline text={line} />
-                {li < lines.length - 1 && <br />}
-              </span>
-            ))}
-          </p>
-        );
-      })}
-    </>
-  );
-}
-
-function FormatInline({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return (
-            <strong key={i} className="font-semibold text-brand-primary">
-              {part.slice(2, -2)}
-            </strong>
-          );
-        }
-        const linkMatch = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
-        if (linkMatch) {
-          const [, label, url] = linkMatch;
-          return (
-            <a
-              key={i}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-accent hover:underline"
-            >
-              {label}
-            </a>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
-}

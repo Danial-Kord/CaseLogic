@@ -99,7 +99,11 @@ export function highlightLegal(text: string): ReactNode[] {
       out.push(
         <mark
           key={key}
-          className="rounded-sm bg-yellow-200/70 px-0.5 text-brand-primary decoration-yellow-500/60"
+          // Pin text to slate-900 (instead of brand-primary) so it
+          // stays readable against the yellow tint in BOTH themes —
+          // brand-primary flips to near-white in dark mode and would
+          // disappear on the yellow background.
+          className="rounded-sm bg-yellow-200/70 px-0.5 text-slate-900 dark:bg-amber-300/40"
         >
           {match[0]}
         </mark>,

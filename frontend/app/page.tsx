@@ -1,258 +1,85 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import Link from "next/link";
 import { strings } from "@/lib/i18n/en";
-import DatasetStatus from "@/components/DatasetStatus";
-import ChatSidebar from "@/components/ChatSidebar";
-import ChatThread from "@/components/ChatThread";
-import ProfileModal from "@/components/ProfileModal";
-import StatuteModal from "@/components/StatuteModal";
-import type {
-  ChatDetail,
-  ChatMessage,
-  ChatSummary,
-  Profile,
-  StatuteHit,
-  ThinkingStep,
-} from "@/lib/types";
+import ThemeToggle from "@/components/ThemeToggle";
+import Hero from "@/components/landing/Hero";
+import Features from "@/components/landing/Features";
+import HowItWorks from "@/components/landing/HowItWorks";
+import CallToAction from "@/components/landing/CallToAction";
 
-const EMPTY_PROFILE: Profile = {
-  name: "",
-  role: "",
-  firm: "",
-  about: "",
-  updated_at: null,
-};
-
+// Marketing landing for CaseLogic. The actual research console lives at
+// /research; every CTA on this page links to it.
+//
+// This page is a server component on purpose — the children handle their
+// own client-side animation. Keeping the shell on the server means the
+// hero copy is in the initial HTML for SEO and renders before JS hydrates.
 export default function HomePage() {
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [activeChat, setActiveChat] = useState<ChatDetail | null>(null);
-  const [isSending, setIsSending] = useState(false);
-  const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [modalStatuteId, setModalStatuteId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
-  const [profileOpen, setProfileOpen] = useState(false);
-
-  const refreshChats = useCallback(async () => {
-    try {
-      const res = await api.listChats();
-      setChats(res.chats);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load chats");
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshChats();
-    api.getProfile().then(setProfile).catch(() => {
-      /* keep EMPTY_PROFILE if backend isn't reachable */
-    });
-  }, [refreshChats]);
-
-  async function handleSaveProfile(next: Omit<Profile, "updated_at">) {
-    const saved = await api.updateProfile(next);
-    setProfile(saved);
-  }
-
-  async function handleNewChat() {
-    setError(null);
-    try {
-      const created = await api.createChat();
-      setActiveChat(created);
-      await refreshChats();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create chat");
-    }
-  }
-
-  async function handleSelectChat(chatId: string) {
-    setError(null);
-    try {
-      const detail = await api.getChat(chatId);
-      setActiveChat(detail);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to open chat");
-    }
-  }
-
-  async function handleDeleteChat(chatId: string) {
-    setError(null);
-    try {
-      await api.deleteChat(chatId);
-      if (activeChat?.chat_id === chatId) setActiveChat(null);
-      await refreshChats();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete chat");
-    }
-  }
-
-  async function handleSend(content: string) {
-    if (!activeChat) return;
-    setError(null);
-
-    const optimistic: ChatMessage = {
-      id: -Date.now(),
-      role: "user",
-      content,
-      hits: [],
-      created_at: new Date().toISOString(),
-    };
-    setActiveChat((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, optimistic] } : prev,
-    );
-    setThinkingSteps([{ kind: "thinking", label: "Reading your question\u2026" }]);
-    setIsSending(true);
-
-    try {
-      const res = await api.streamChatMessage(
-        activeChat.chat_id,
-        { content },
-        (event) => {
-          // Translate raw SSE events into ThinkingStep entries the UI
-          // can stack. Each tool_start opens a new step; the matching
-          // tool_done patches the same step with a summary + done flag.
-          setThinkingSteps((prev) => {
-            switch (event.type) {
-              case "started":
-                return prev;
-              case "thinking":
-                if (event.step === 0) return prev; // already seeded
-                return [...prev, { kind: "thinking", label: event.label }];
-              case "thought":
-                return [...prev, { kind: "thought", text: event.text }];
-              case "tool_start":
-                return [
-                  ...prev,
-                  {
-                    kind: "tool",
-                    name: event.name,
-                    label: event.label,
-                    done: false,
-                  },
-                ];
-              case "tool_done": {
-                // Patch the most recent matching tool_start.
-                const idx = [...prev]
-                  .reverse()
-                  .findIndex(
-                    (s) =>
-                      s.kind === "tool" && s.name === event.name && !s.done,
-                  );
-                if (idx === -1) return prev;
-                const realIdx = prev.length - 1 - idx;
-                const next = prev.slice();
-                const target = next[realIdx];
-                if (target.kind !== "tool") return prev;
-                next[realIdx] = {
-                  ...target,
-                  summary: event.summary,
-                  done: true,
-                };
-                return next;
-              }
-              case "drafting":
-                return [...prev, { kind: "drafting" }];
-              case "final":
-              case "error":
-                return prev;
-            }
-          });
-        },
-      );
-
-      setActiveChat((prev) => {
-        if (!prev) return prev;
-        const withoutOptimistic = prev.messages.filter(
-          (m) => m.id !== optimistic.id,
-        );
-        return {
-          ...prev,
-          title: res.chat_title,
-          messages: [
-            ...withoutOptimistic,
-            res.user_message,
-            res.assistant_message,
-          ],
-        };
-      });
-      await refreshChats();
-    } catch (e) {
-      setActiveChat((prev) =>
-        prev
-          ? {
-              ...prev,
-              messages: prev.messages.filter((m) => m.id !== optimistic.id),
-            }
-          : prev,
-      );
-      setError(e instanceof Error ? e.message : "Failed to send message");
-    } finally {
-      setIsSending(false);
-      setThinkingSteps([]);
-    }
-  }
-
-  function handleSelectStatute(hit: StatuteHit) {
-    setModalStatuteId(hit.statute_id);
-  }
-
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-brand-border bg-brand-surface px-6 py-4">
-        <div className="flex items-baseline gap-3">
-          <span className="font-serif text-xl text-brand-primary">
+    <div className="flex min-h-screen flex-col bg-brand-bg">
+      <SiteHeader />
+      <main className="flex-1">
+        <Hero />
+        <Features />
+        <HowItWorks />
+        <CallToAction />
+      </main>
+      <SiteFooter />
+    </div>
+  );
+}
+
+function SiteHeader() {
+  return (
+    <header className="sticky top-0 z-30 border-b border-brand-border bg-brand-surface/80 backdrop-blur supports-[backdrop-filter]:bg-brand-surface/60">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+        <Link href="/" className="flex items-baseline gap-2.5 group">
+          <span className="font-serif text-lg font-semibold text-brand-primary transition-colors group-hover:text-brand-accent">
             {strings.app.name}
           </span>
-          <span className="text-xs text-brand-muted">
+          <span className="hidden text-xs text-brand-muted sm:inline">
             {strings.app.tagline}
           </span>
-        </div>
-        <DatasetStatus />
-      </header>
+        </Link>
+        <nav className="flex items-center gap-2 sm:gap-4">
+          <a
+            href="#how-it-works"
+            className="hidden text-sm font-medium text-brand-secondary transition-colors hover:text-brand-primary sm:inline"
+          >
+            How it works
+          </a>
+          <ThemeToggle />
+          <Link
+            href="/research"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-accent-hover"
+          >
+            Launch
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3.33 8h9.34M9.33 4l3.34 4-3.34 4" />
+            </svg>
+          </Link>
+        </nav>
+      </div>
+    </header>
+  );
+}
 
-      <main className="grid flex-1 grid-cols-[18rem_1fr] gap-4 overflow-hidden p-4">
-        <ChatSidebar
-          chats={chats}
-          activeChatId={activeChat?.chat_id ?? null}
-          onSelect={handleSelectChat}
-          onNew={handleNewChat}
-          onDelete={handleDeleteChat}
-          profile={profile}
-          onEditProfile={() => setProfileOpen(true)}
-        />
-        <div className="flex flex-col gap-2 overflow-hidden">
-          {error && (
-            <p className="rounded border border-brand-error/30 bg-brand-error/5 px-3 py-2 text-sm text-brand-error">
-              {error}
-            </p>
-          )}
-          <ChatThread
-            chat={activeChat}
-            isSending={isSending}
-            thinkingSteps={thinkingSteps}
-            onSend={handleSend}
-            onSelectStatute={handleSelectStatute}
-          />
-        </div>
-      </main>
-
-      <footer className="border-t border-brand-border bg-brand-surface px-6 py-2 text-center text-xs text-brand-muted">
-        {strings.app.disclaimer}
-      </footer>
-
-      <StatuteModal
-        statuteId={modalStatuteId}
-        onClose={() => setModalStatuteId(null)}
-      />
-
-      <ProfileModal
-        open={profileOpen}
-        profile={profile}
-        onClose={() => setProfileOpen(false)}
-        onSave={handleSaveProfile}
-      />
-    </div>
+function SiteFooter() {
+  return (
+    <footer className="border-t border-brand-border bg-brand-surface/60 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 text-center text-xs text-brand-muted sm:flex-row sm:text-left">
+        <p>{strings.app.disclaimer}</p>
+        <p className="font-mono">
+          © {new Date().getFullYear()} CaseLogic — hackathon prototype
+        </p>
+      </div>
+    </footer>
   );
 }

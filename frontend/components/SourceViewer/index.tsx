@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import BookmarkButton from "@/components/BookmarkButton";
 import { strings } from "@/lib/i18n/en";
+import { statuteDetailToHit } from "@/lib/bookmarksStorage";
 import type { StatuteDetail } from "@/lib/types";
 import FactorChips from "../shared/FactorChips";
 import StatuteMetadata from "./StatuteMetadata";
@@ -93,15 +95,18 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
               {statute.universal_citation}
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={handleCopyCitation}
-            className="shrink-0 rounded-md border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-muted transition-colors hover:border-brand-accent hover:text-brand-accent"
-          >
-            {copied
-              ? strings.sourceViewer.copied
-              : strings.sourceViewer.copyCitation}
-          </button>
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <BookmarkButton hit={statuteDetailToHit(statute)} />
+            <button
+              type="button"
+              onClick={handleCopyCitation}
+              className="shrink-0 rounded-md border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-muted transition-colors hover:border-brand-accent hover:text-brand-accent"
+            >
+              {copied
+                ? strings.sourceViewer.copied
+                : strings.sourceViewer.copyCitation}
+            </button>
+          </div>
         </div>
         <StatuteMetadata statute={statute} />
       </header>

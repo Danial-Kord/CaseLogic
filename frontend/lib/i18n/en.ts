@@ -42,6 +42,12 @@ export const strings = {
     } as Record<string, string>,
   },
 
+  bookmarks: {
+    sectionTitle: "Saved statutes",
+    addLabel: (citation: string) => `Save ${citation}`,
+    removeLabel: (citation: string) => `Remove ${citation} from saved`,
+  },
+
   resultsPanel: {
     enterQuery: "Enter a query on the left to search statutes.",
     searching: "Searching…",
@@ -58,6 +64,7 @@ export const strings = {
       matchedVia: "Match",
       factors: "Factors",
       snippet: "Snippet",
+      bookmark: "Save",
     },
   },
 
@@ -85,6 +92,15 @@ export const strings = {
     copyCitation: "Copy citation",
     copied: "Copied!",
     crossRefTooltip: "Cross-reference to another statute",
+  },
+
+  themeToggle: {
+    ariaLabel: "Color theme",
+    optionLabel: {
+      light: "Light theme",
+      system: "Match system theme",
+      dark: "Dark theme",
+    } as Record<"light" | "system" | "dark", string>,
   },
 
   datasetStatus: {
