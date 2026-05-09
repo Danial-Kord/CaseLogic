@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { strings } from "@/lib/i18n/en";
-import type { FactorCategory } from "@/lib/types";
+import type { FactorCount } from "@/lib/types";
 
 interface FactorDropdownProps {
   value: string;
@@ -14,7 +14,7 @@ export default function FactorDropdown({
   value,
   onChange,
 }: FactorDropdownProps) {
-  const [factors, setFactors] = useState<FactorCategory[]>([]);
+  const [factors, setFactors] = useState<FactorCount[]>([]);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {

@@ -77,7 +77,7 @@ describe("SearchPanel", () => {
     );
   });
 
-  it("includes the selected factor at the top level (not nested in filters)", async () => {
+  it("includes factor at the top level when one is selected", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);
@@ -120,7 +120,7 @@ describe("SearchPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("populates the factor dropdown with statute_count labels from getFactors()", async () => {
+  it("populates the factor dropdown from getFactors() with statute_count", async () => {
     render(<SearchPanel onSearch={jest.fn()} isLoading={false} />);
     await waitFor(() => {
       expect(

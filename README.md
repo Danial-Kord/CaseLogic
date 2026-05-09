@@ -8,35 +8,55 @@ For a short cheat sheet on adapters, extraction/retrieval/reasoning/verification
 
 **Phased prep plan with technology guide:** [docs/plan.md](docs/plan.md).
 
+**Phase-1 MVP plan (CA Vehicle Code Harvester, query → UI):** [docs/phase1_plan.md](docs/phase1_plan.md). That doc describes the statute tables, hybrid retrieval, and `/statutes` API to build next; not all of it is implemented in the repo yet.
+
 ## Current state
 
-**Pre-kickoff scaffolding only.** Every module file contains a one-line docstring and nothing else. No logic is implemented yet — that happens at kickoff once the eval set drops.
+The repo is **past blank scaffolding** in a few areas, but **most pipeline modules are still stubs**.
+
+### Implemented
+
+- **FastAPI app** ([backend/main.py](backend/main.py)): CORS for `http://localhost:3000`, `init_db` on startup, `/healthz`.
+- **Status + ingest API** ([backend/api/](backend/api/)):
+  - `GET /status` — document counts + sample URLs from the `documents` table.
+  - `POST /ingest/search` — Claude `web_search_20250305` discovers URLs, then `httpx` fetches and persists rows (deduped by URL).
+  - `POST /ingest/url` — direct URL fetch + persist.
+- **Persistence** ([backend/config.py](backend/config.py), [backend/db.py](backend/db.py), [backend/models.py](backend/models.py)): SQLite via SQLAlchemy; **`documents` table only** (no `statutes` / Phase-1 statute schema in code yet).
+- **Ingestion** ([backend/ingestion/](backend/ingestion/)): `WebAdapter` + `ingest_search` pipeline written end-to-end for web search → fetch → `Document` rows; `base.py` protocol; `canlii` / `pdf` adapters are still one-line stubs.
+- **Extraction types** ([backend/extraction/schemas.py](backend/extraction/schemas.py)): full Pydantic models for Variant A (PI case comparator) — `PICaseFields`, damages, liability, `SourceSupport`. `extract.py` / `prompts.py` are not wired to production extraction yet.
+- **Smoke check** ([backend/smoke_check.py](backend/smoke_check.py)): `python -m backend.smoke_check` verifies deps + `ANTHROPIC_API_KEY`.
+- **Frontend** ([frontend/](frontend/)): Next.js 15 + React 19 + Tailwind; three-column shell matching the baseline layout. **Components still return `null`** — no live API wiring.
+
+### Still stubs or missing
+
+- **Statute Harvester (Phase 1 per brief):** `Statute` / `StatuteFactor` models, Chroma + FTS5 hybrid retrieval, `GET /statutes/{id}`, `POST /statutes/search`, `GET /factors` — specified in [docs/phase1_plan.md](docs/phase1_plan.md); **not present in `backend/` yet** (e.g. `routes_statutes.py`, `retrieval/*` implementations).
+- **Parsing, chunking, case-law extraction runtime**, **retrieval indexes**, **reasoning**, **verification** — baseline modules exist as placeholder files.
+- **OpenClaw** — [openclaw/tools.json](openclaw/tools.json) / [openclaw/agent_prompt.md](openclaw/agent_prompt.md) not filled for statute tools.
 
 ## Repo layout
 
 ```
 .env.example              ANTHROPIC_API_KEY, DATABASE_URL, VECTOR_INDEX_PATH
-requirements.txt          fastapi, anthropic, chromadb, sqlalchemy, ...
-package.json              placeholder; frontend toolchain not yet picked
+requirements.txt          fastapi, anthropic, chromadb, sqlalchemy, httpx, ...
+package.json              npm scripts that delegate to frontend/
 
 backend/                  Python package — FastAPI app
-  main.py                 app entry
+  main.py                 app entry, routers: status + ingest
   config.py / db.py       runtime config + SQLAlchemy session
-  models.py               documents / chunks / metadata / claim_support tables
-  ingestion/              fetch + orchestrate
-    pipeline.py
-    adapters/             base, canlii, web, pdf
-  parsing/                clean_text, chunk, pdf_parse, html_parse
-  extraction/             schemas, extract, prompts
-  retrieval/              embeddings, vector_store, keyword_search, hybrid_search
-  reasoning/              answer, compare, summarize
-  verification/           claims, verify, citations
-  api/                    routes_ingest, routes_search, routes_answer, routes_verify, routes_status
+  models.py               documents table (statute tables = planned in phase1_plan)
+  ingestion/              pipeline + adapters (web implemented; canlii/pdf stub)
+  parsing/                stubs
+  extraction/             schemas.py (PI case Pydantic); extract/prompts stub
+  retrieval/              stubs (Chroma + hybrid planned)
+  reasoning/              stubs
+  verification/           stubs
+  api/                    routes_ingest, routes_status (+ routes_search/answer/verify stub)
+  smoke_check.py
 
-openclaw/                 agent_prompt.md, tools.json, config.example.json
-frontend/src/             App.tsx + components/ (placeholder TSX, no toolchain yet)
-data/                     raw/, processed/, exports/, index/  (.gitkeep only)
-docs/                     architecture.md, demo_script.md, design_notes.md
+openclaw/                 agent_prompt.md, tools.json — minimal / empty
+frontend/                 Next.js app: app/, components/ (UI placeholders)
+data/                     raw/, processed/, exports/, index/  (.gitkeep)
+docs/                     plan.md, phase1_plan.md, architecture.md, demo_script.md, ...
 ```
 
 ## Setup
@@ -45,47 +65,33 @@ docs/                     architecture.md, demo_script.md, design_notes.md
 python -m venv .venv
 .venv\Scripts\activate    # Windows
 pip install -r requirements.txt
-cp .env.example .env      # then fill in ANTHROPIC_API_KEY
+cp .env.example .env      # then fill in ANTHROPIC_API_KEY (needed for /ingest/search)
 ```
 
-## TODO — implement at kickoff
+**Frontend (optional):**
 
-Pre-kickoff (safe to do before eval drops):
-- [ ] Pick the variant from Section 9 of the baseline doc (PI comparator / citation verifier / intake assistant / trend analyzer / records research)
-- [ ] Pick one jurisdiction + one source type (avoid Failure Mode 3: too broad)
-- [ ] Decide vector DB (default: Chroma)
-- [ ] Initialize frontend toolchain (Vite + React + TS recommended)
-- [ ] Assign team roles per Section 16 (data / extraction / retrieval / agent-backend / product-demo)
+```bash
+npm install --prefix frontend
+npm run dev                 # from repo root: runs Next dev server (see package.json)
+```
 
-Backend modules to implement:
-- [ ] `backend/main.py` — FastAPI app, mount routers
-- [ ] `backend/config.py` — load env vars
-- [ ] `backend/db.py` + `backend/models.py` — SQLAlchemy engine + 4 tables
-- [ ] `backend/ingestion/adapters/*` — start with one (web or canlii)
-- [ ] `backend/ingestion/pipeline.py` — fetch → parse → chunk → extract → index
-- [ ] `backend/parsing/*` — html_parse + clean_text first; pdf_parse if needed
-- [ ] `backend/parsing/chunk.py` — paragraph-preserving chunker
-- [ ] `backend/extraction/schemas.py` — Pydantic models for chosen variant
-- [ ] `backend/extraction/extract.py` — Anthropic-based structured extraction
-- [ ] `backend/retrieval/embeddings.py` + `vector_store.py` — Chroma index
-- [ ] `backend/retrieval/keyword_search.py` + `hybrid_search.py` — combined ranking
-- [ ] `backend/reasoning/answer.py` + `compare.py` + `summarize.py`
-- [ ] `backend/verification/claims.py` + `verify.py` + `citations.py`
-- [ ] `backend/api/routes_*.py` — wire endpoints from Section 6
+## Run the backend
 
-OpenClaw agent:
-- [ ] `openclaw/agent_prompt.md` — paste the baseline system prompt from Section 10
-- [ ] `openclaw/tools.json` — declare search_documents, get_document, extract_fields, compare_documents, verify_claims, show_sources
+```bash
+uvicorn backend.main:app --reload
+```
 
-Frontend:
-- [ ] `npm create vite` (or chosen alternative) inside `frontend/`
-- [ ] Wire components: SearchPanel, ResultsPanel, ComparisonTable, VerificationPanel, SourceViewer, DatasetStatus
+Use `/docs` for interactive OpenAPI. **Smallest working loop today:** `POST /ingest/url` or `/ingest/search` → rows in SQLite + `GET /status`.
 
-Demo & polish (Hours 18–24):
-- [ ] Dataset status panel
-- [ ] 3 demo queries rehearsed
-- [ ] Fallback screenshots in case live demo breaks
-- [ ] Pitch + 30-second value framing
+## Next milestones (aligned with hackathon + [docs/phase1_plan.md](docs/phase1_plan.md))
+
+1. **Data:** CA Vehicle Code ingest (e.g. leginfo) → `statutes` + `statute_factors` (or equivalent) with real `official_url` per row.
+2. **Retrieval:** implement Chroma + SQLite FTS5 + RRF hybrid search; `python -m backend.retrieval.build` (or equivalent) after ingest.
+3. **API:** statute lookup + search + factor listing; extend `/status` for statute counts and eval metadata.
+4. **UI:** wire `SearchPanel` / `ResultsPanel` / `SourceViewer` / `DatasetStatus` to those endpoints.
+5. **OpenClaw:** tools pointing at the statute API for judge demos.
+
+The checklist in [docs/plan.md](docs/plan.md) remains the broader baseline; [docs/phase1_plan.md](docs/phase1_plan.md) narrows Phase 1 to **California-only** `query → result → UI` on statutes.
 
 ## Architecture Q&A (guidance)
 
@@ -93,50 +99,25 @@ Short answers for common “what does this module do?” questions. The authorit
 
 ### What is `backend/ingestion/adapters/*` — start with one (web or CanLII)?
 
-These are **source-specific connectors** that fetch public material (HTML/PDF/metadata) and hand it to `pipeline.py` (fetch → parse → chunk → extract → index). Stubs today: `base.py`, `web.py`, `canlii.py`, `pdf.py`.
+These are **source-specific connectors** that fetch public material (HTML/PDF/metadata) and hand it to `pipeline.py`. **Web** is implemented (`web_search` + fetch + persist to `documents`). **CanLII** / **pdf** are stubs today.
 
-**Start with one adapter** to avoid Failure Mode 3 (too broad): implement it end-to-end through the pipeline before adding others.
+For the **Harvester** track, add a dedicated statute adapter (see [docs/phase1_plan.md](docs/phase1_plan.md)); the generic web adapter is still useful for discovery and Phase-2 case law.
 
-- **Web** — arbitrary public URLs; flexible but you own fetch policy, parsing quirks, and robots/terms compliance.
-- **CanLII** — Canadian case law from a single well-defined public corpus; good when jurisdiction + source type are fixed.
+### What is `backend/extraction/schemas.py`?
 
-### What is `backend/extraction/schemas.py` — Pydantic models for chosen variant?
-
-**Typed shapes for structured extraction** (injuries, damages, parties, deadlines—whatever matches the **one** hackathon variant you pick in baseline Section 9). They validate LLM/rule output, serialize into storage (`metadata.schema_name` / `fields_json`), and align with the `extract_fields` API (`fields`, `confidence`, ideally `source_support` with URL + quote + paragraph). Implement models for **your** variant only, not every column in the baseline’s example table.
+**Typed shapes for structured extraction.** Currently holds **PI case comparator** models (`PICaseFields`, damages, liability). The Phase-1 statute workflow will add or prioritize a `Statute`-shaped schema when that layer is implemented.
 
 ### What do extraction + retrieval + reasoning + verification modules do?
 
-**Extraction**
+**Extraction** — `schemas.py` defines fields; `extract.py` / `prompts.py` are placeholders until kickoff wiring.
 
-- `schemas.py` — Pydantic models for extracted fields.
-- `extract.py` — Anthropic-based structured extraction over **supplied** source text only; output should include traceability (`source_support`), not facts from model memory.
+**Retrieval** — planned: Chroma + keyword (FTS) + hybrid fusion for statute search (see phase1 plan). Today the files are stubs.
 
-**Retrieval**
-
-- `embeddings.py` + `vector_store.py` — embed chunks and persist a **Chroma** index; IDs must tie back to documents/chunks and URLs.
-- `keyword_search.py` + `hybrid_search.py` — lexical search plus fusion with vectors and metadata filters (addresses Failure Mode 4: pure vector misses exact phrases).
-
-**Reasoning** (Module 8)
-
-- `answer.py`, `compare.py`, `summarize.py` — synthesize **retrieved** evidence into answers, comparisons, and digests; avoid introducing uncited facts.
-
-**Verification** (Module 9)
-
-- `claims.py` — represent or extract atomic claims from an answer.
-- `verify.py` — match claims to snippets; label `verified` / `partial` / `unsupported` with URLs and reasons.
-- `citations.py` — citation formatting and consistency with source metadata for UI/agent.
-
-End-to-end flow: ingest → chunk → **extract** → index (**embeddings** + **vector_store**) → **keyword** + **hybrid** search → **answer / compare / summarize** → **claims + verify + citations**.
+**Reasoning** / **Verification** — stubs; answers must stay source-grounded when you implement them (baseline Module 8–9).
 
 ### Where does OpenClaw fit?
 
-**OpenClaw is the conversational orchestration layer on top of the backend**, not a substitute for `backend/`.
-
-- Baseline **Module 10**: the agent uses **tools** (`search_documents`, `get_document`, `extract_fields`, `compare_documents`, `verify_claims`, `show_sources`, …) instead of inventing legal facts.
-- Those tools map to **FastAPI** routes under `backend/api/` (baseline Section 6 / Module 11).
-- Repo wiring lives in **`openclaw/`** (`agent_prompt.md`, `tools.json`, `config.example.json`).
-
-FastAPI implements capabilities; OpenClaw decides **when** to call them and how to present results in chat, still grounded in retrieved sources and verification.
+**OpenClaw is the conversational layer on top of the backend**, calling FastAPI tools rather than inventing legal facts. Tool declarations live in `openclaw/`; they are not wired for statute search yet.
 
 ## Trust & safety
 

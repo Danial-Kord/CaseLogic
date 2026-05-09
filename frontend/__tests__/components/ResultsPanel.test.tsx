@@ -10,14 +10,14 @@ function makeHit(overrides: Partial<StatuteHit> = {}): StatuteHit {
     code_name: "Cal. Veh. Code",
     section_number: "23152",
     subdivision: "a",
-    division: "Division 11.5",
+    division: "Division 11",
     chapter: "Chapter 12",
     statute_text:
       "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
     complete_statute: "Pursuant to Cal. Veh. Code § 23152(a)…",
-    official_url: "https://leginfo.legislature.ca.gov/sections/23152",
+    official_url:
+      "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
     factors: ["DUI/DWI"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
     score: 0.95,
     matched_via: "hybrid",
     ...overrides,
@@ -34,7 +34,8 @@ const MOCK_RESULTS: StatuteHit[] = [
       "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
     factors: ["Reckless Driving"],
     matched_via: "vector",
-    official_url: "https://leginfo.legislature.ca.gov/sections/23103",
+    official_url:
+      "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23103",
   }),
 ];
 

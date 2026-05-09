@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { strings } from "@/lib/i18n/en";
-import type { StatuteSearchRequest } from "@/lib/types";
+import type { SearchRequest } from "@/lib/types";
 import QueryTextarea from "./QueryTextarea";
 import FactorDropdown from "./FactorDropdown";
 
 interface SearchPanelProps {
-  onSearch: (request: StatuteSearchRequest) => void;
+  onSearch: (request: SearchRequest) => void;
   isLoading: boolean;
 }
 

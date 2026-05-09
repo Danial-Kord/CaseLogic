@@ -62,7 +62,7 @@ export const strings = {
     backendOffline: "Backend offline",
     loading: "Loading...",
     statutesIndexed: (n: number) => `${n.toLocaleString()} statutes indexed`,
-    evalBadge: (recall: number) => `eval r@5: ${recall.toFixed(2)}`,
+    evalBadge: (recall: number) => `recall@5 ${(recall * 100).toFixed(0)}%`,
     evalTooltip: "recall@5 on the released eval set",
     lastEvalTooltip: (date: string) => `last eval ${date}`,
   },

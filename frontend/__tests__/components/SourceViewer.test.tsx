@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import SourceViewer from "@/components/SourceViewer";
 import { api } from "@/lib/api";
-import type { StatuteOut } from "@/lib/types";
+import type { StatuteDetail } from "@/lib/types";
 
 jest.mock("@/lib/api", () => ({
   api: {
@@ -9,23 +9,23 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
-const MOCK_STATUTE: StatuteOut = {
+const MOCK_STATUTE: StatuteDetail = {
   statute_id: "ca-veh-23152-a",
   universal_citation: "Cal. Veh. Code § 23152(a)",
   jurisdiction: "California",
   code_name: "Cal. Veh. Code",
   section_number: "23152",
   subdivision: "a",
-  division: "Division 11.5",
+  division: "Division 11",
   chapter: "Chapter 12",
   statute_text:
     "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
   complete_statute:
-    "Pursuant to Cal. Veh. Code § 23152(a), it is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+    'Pursuant to Cal. Veh. Code § 23152(a), "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle."',
   official_url:
     "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
   factors: ["DUI/DWI"],
-  retrieved_at: "2026-05-09T13:55:01.000Z",
+  retrieved_at: null,
 };
 
 describe("SourceViewer", () => {
@@ -63,7 +63,7 @@ describe("SourceViewer", () => {
       expect(screen.getByText("DUI/DWI")).toBeInTheDocument();
     });
     // Metadata row contains jurisdiction · division · chapter · subd. (a)
-    expect(screen.getByText(/California · Division 11\.5/)).toBeInTheDocument();
+    expect(screen.getByText(/California · Division 11/)).toBeInTheDocument();
   });
 
   it("renders 'Open on leginfo' link pointing to official_url", async () => {
@@ -106,7 +106,7 @@ describe("SourceViewer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls getStatute with the slug, not a citation string", async () => {
+  it("calls getStatute with the provided statuteId slug", async () => {
     jest.mocked(api.getStatute).mockResolvedValue(MOCK_STATUTE);
     render(<SourceViewer statuteId="ca-veh-23152-a" />);
     await waitFor(() => screen.getByText(MOCK_STATUTE.statute_text));
@@ -116,7 +116,7 @@ describe("SourceViewer", () => {
   });
 
   it("refetches when the statuteId prop changes", async () => {
-    const second: StatuteOut = {
+    const second: StatuteDetail = {
       ...MOCK_STATUTE,
       statute_id: "ca-veh-23103-a",
       universal_citation: "Cal. Veh. Code § 23103(a)",

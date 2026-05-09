@@ -1,11 +1,11 @@
 import type {
-  StatuteOut,
-  StatuteHit,
-  StatuteSearchRequest,
-  StatuteSearchResponse,
-  StatusResponse,
   FactorsResponse,
   MatchedVia,
+  SearchRequest,
+  SearchResponse,
+  StatusResponse,
+  StatuteDetail,
+  StatuteHit,
 } from "./types";
 import { looksLikeCitation } from "./citation";
 
@@ -13,10 +13,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // Default OFF. Flip ON via .env.local while the backend is unreachable.
 const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
 
-// Mock statutes shaped like the real StatuteOut payload so components don't
-// need to special-case mock vs live data. Slugs follow the contract grammar
-// (e.g. "ca-veh-23152-a", subdivision separated by a hyphen).
-const MOCK_STATUTES: StatuteOut[] = [
+const MOCK_STATUTES: StatuteDetail[] = [
   {
     statute_id: "ca-veh-23152-a",
     universal_citation: "Cal. Veh. Code § 23152(a)",
@@ -24,16 +21,16 @@ const MOCK_STATUTES: StatuteOut[] = [
     code_name: "Cal. Veh. Code",
     section_number: "23152",
     subdivision: "a",
-    division: "Division 11.5",
+    division: "Division 11",
     chapter: "Chapter 12",
     statute_text:
       "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
     complete_statute:
-      "Pursuant to Cal. Veh. Code § 23152(a), it is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle.",
+      'Pursuant to Cal. Veh. Code § 23152(a), "It is unlawful for a person who is under the influence of any alcoholic beverage to drive a vehicle."',
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23152",
     factors: ["DUI/DWI"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
+    retrieved_at: null,
   },
   {
     statute_id: "ca-veh-23103-a",
@@ -42,34 +39,16 @@ const MOCK_STATUTES: StatuteOut[] = [
     code_name: "Cal. Veh. Code",
     section_number: "23103",
     subdivision: "a",
-    division: "Division 11.5",
+    division: "Division 11",
     chapter: "Chapter 12",
     statute_text:
       "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
     complete_statute:
-      "Pursuant to Cal. Veh. Code § 23103(a), a person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving.",
+      'Pursuant to Cal. Veh. Code § 23103(a), "A person who drives a vehicle upon a highway in willful or wanton disregard for the safety of persons or property is guilty of reckless driving."',
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=23103",
     factors: ["Reckless Driving"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
-  },
-  {
-    statute_id: "ca-veh-21750-a",
-    universal_citation: "Cal. Veh. Code § 21750(a)",
-    jurisdiction: "California",
-    code_name: "Cal. Veh. Code",
-    section_number: "21750",
-    subdivision: "a",
-    division: "Division 11",
-    chapter: "Chapter 5",
-    statute_text:
-      "The driver of a vehicle overtaking another vehicle proceeding in the same direction shall pass to the left at a safe distance without interfering with the safe operation of the overtaken vehicle.",
-    complete_statute:
-      "Pursuant to Cal. Veh. Code § 21750(a), the driver of a vehicle overtaking another vehicle proceeding in the same direction shall pass to the left at a safe distance without interfering with the safe operation of the overtaken vehicle.",
-    official_url:
-      "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=21750",
-    factors: ["Improper Passing"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
+    retrieved_at: null,
   },
   {
     statute_id: "ca-veh-22350",
@@ -83,11 +62,11 @@ const MOCK_STATUTES: StatuteOut[] = [
     statute_text:
       "No person shall drive a vehicle upon a highway at a speed greater than is reasonable or prudent having due regard for weather, visibility, the traffic on, and the surface and width of, the highway.",
     complete_statute:
-      "Pursuant to Cal. Veh. Code § 22350, no person shall drive a vehicle upon a highway at a speed greater than is reasonable or prudent having due regard for weather, visibility, the traffic on, and the surface and width of, the highway.",
+      'Pursuant to Cal. Veh. Code § 22350, "No person shall drive a vehicle upon a highway at a speed greater than is reasonable or prudent…"',
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22350",
     factors: ["Driving Too Fast For Conditions"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
+    retrieved_at: null,
   },
   {
     statute_id: "ca-veh-21453-a",
@@ -101,15 +80,14 @@ const MOCK_STATUTES: StatuteOut[] = [
     statute_text:
       "A driver facing a steady circular red signal alone shall stop at a marked limit line, but if none, before entering the crosswalk on the near side of the intersection.",
     complete_statute:
-      "Pursuant to Cal. Veh. Code § 21453(a), a driver facing a steady circular red signal alone shall stop at a marked limit line, but if none, before entering the crosswalk on the near side of the intersection.",
+      'Pursuant to Cal. Veh. Code § 21453(a), "A driver facing a steady circular red signal alone shall stop…"',
     official_url:
       "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=21453",
     factors: ["Failure to Obey Traffic Control Device"],
-    retrieved_at: "2026-05-09T13:55:01.000Z",
+    retrieved_at: null,
   },
 ];
 
-// 17 locked categories, byte-exact, statute_count from the released CSV.
 const MOCK_FACTORS: FactorsResponse = {
   factors: [
     { factor: "DUI/DWI", statute_count: 3 },
@@ -135,36 +113,59 @@ const MOCK_FACTORS: FactorsResponse = {
   ],
 };
 
-function mockSearch(req: StatuteSearchRequest): StatuteSearchResponse {
-  const q = req.query.toLowerCase();
-  // Pick a plausible matched_via per query so the badge demo is visible.
-  const inferMatchedVia = (s: StatuteOut): MatchedVia => {
-    if (looksLikeCitation(req.query)) return "citation";
-    if (s.factors.some((f) => f.toLowerCase().includes(q))) return "keyword";
-    if (s.statute_text.toLowerCase().includes(q)) return "hybrid";
-    return "vector";
-  };
+// Pick a plausible matched_via per query so the badge palette is visible
+// in mock mode. Live data carries this from the backend.
+function inferMatchedVia(s: StatuteDetail, query: string): MatchedVia {
+  if (looksLikeCitation(query)) return "citation";
+  const q = query.toLowerCase();
+  if (s.factors.some((f) => f.toLowerCase().includes(q))) return "keyword";
+  if (s.statute_text.toLowerCase().includes(q)) return "hybrid";
+  return "vector";
+}
 
+function detailToHit(
+  detail: StatuteDetail,
+  score: number,
+  matchedVia: MatchedVia
+): StatuteHit {
+  return {
+    statute_id: detail.statute_id,
+    universal_citation: detail.universal_citation,
+    jurisdiction: detail.jurisdiction,
+    code_name: detail.code_name,
+    section_number: detail.section_number,
+    subdivision: detail.subdivision,
+    division: detail.division,
+    chapter: detail.chapter,
+    statute_text: detail.statute_text,
+    complete_statute: detail.complete_statute,
+    official_url: detail.official_url,
+    score,
+    factors: detail.factors,
+    matched_via: matchedVia,
+  };
+}
+
+function mockSearch(request: SearchRequest): SearchResponse {
+  const q = request.query.toLowerCase();
+  const top_k = request.top_k ?? 10;
   const filtered = MOCK_STATUTES.filter((s) => {
-    if (req.factor && !s.factors.includes(req.factor)) return false;
-    return (
+    const matchesText =
       s.universal_citation.toLowerCase().includes(q) ||
       s.statute_text.toLowerCase().includes(q) ||
-      s.factors.some((f) => f.toLowerCase().includes(q))
-    );
+      s.factors.some((f) => f.toLowerCase().includes(q));
+    const matchesFactor = !request.factor || s.factors.includes(request.factor);
+    return matchesText && matchesFactor;
   });
-
-  const results: StatuteHit[] = filtered.map((s, i) => ({
-    ...s,
-    score: 1 / (60 + i + 1),
-    matched_via: inferMatchedVia(s),
-  }));
-
   return {
-    query: req.query,
-    factor: req.factor ?? null,
-    top_k: req.top_k ?? 10,
-    results: results.slice(0, req.top_k ?? 10),
+    query: request.query,
+    factor: request.factor ?? null,
+    top_k,
+    results: filtered
+      .slice(0, top_k)
+      .map((s, i) =>
+        detailToHit(s, 1 / (60 + i), inferMatchedVia(s, request.query))
+      ),
   };
 }
 
@@ -189,9 +190,7 @@ class ApiClient {
     this.mockMode = mockMode;
   }
 
-  async search(
-    request: StatuteSearchRequest
-  ): Promise<StatuteSearchResponse> {
+  async search(request: SearchRequest): Promise<SearchResponse> {
     if (this.mockMode) {
       await this.simulateLatency();
       return mockSearch(request);
@@ -208,31 +207,19 @@ class ApiClient {
     return res.json();
   }
 
-  async getStatus(): Promise<StatusResponse> {
+  // GET /statutes/{statute_id}. Slug must match ^[a-z0-9-]+$ — caller's
+  // responsibility (use lib/citation.parseCitationToSlug). Throws Error("Not
+  // found") on 404 so the caller can branch on UX.
+  async getStatute(statuteId: string): Promise<StatuteDetail> {
     if (this.mockMode) {
       await this.simulateLatency(200);
-      return mockStatus();
-    }
-
-    const res = await fetch(`${this.baseUrl}/status`);
-    if (!res.ok) {
-      throw new Error(`Status check failed: ${res.status}`);
-    }
-    return res.json();
-  }
-
-  // GET /statutes/{slug}. The slug must match ^[a-z0-9-]+$ — caller's
-  // responsibility (use lib/citation.parseCitationToSlug).
-  // Throws Error("Not found") on 404 so the caller can branch on UX.
-  async getStatute(slug: string): Promise<StatuteOut> {
-    if (this.mockMode) {
-      await this.simulateLatency(200);
-      const found = MOCK_STATUTES.find((s) => s.statute_id === slug);
+      const found = MOCK_STATUTES.find((s) => s.statute_id === statuteId);
       if (!found) throw new Error("Not found");
       return found;
     }
 
-    const res = await fetch(`${this.baseUrl}/statutes/${slug}`);
+    const encoded = encodeURIComponent(statuteId);
+    const res = await fetch(`${this.baseUrl}/statutes/${encoded}`);
     if (res.status === 404) throw new Error("Not found");
     if (!res.ok) throw new Error(`Statute lookup failed: ${res.status}`);
     return res.json();
@@ -249,8 +236,22 @@ class ApiClient {
     return res.json();
   }
 
+  async getStatus(): Promise<StatusResponse> {
+    if (this.mockMode) {
+      await this.simulateLatency(200);
+      return mockStatus();
+    }
+
+    const res = await fetch(`${this.baseUrl}/status`);
+    if (!res.ok) {
+      throw new Error(`Status check failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  // Phase-2 helper: ChatPanel collapses search results into a prose answer.
+  // Not wired in Phase 1; kept here so the existing ChatPanel still compiles.
   async chat(query: string): Promise<string> {
-    // Phase 1: wrap search. Phase 2 will hit the OpenClaw agent endpoint.
     const searchRes = await this.search({ query, top_k: 5 });
 
     if (searchRes.results.length === 0) {

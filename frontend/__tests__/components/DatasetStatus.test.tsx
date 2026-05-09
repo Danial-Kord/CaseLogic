@@ -9,15 +9,18 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
-const BASE_STATUS: StatusResponse = {
-  indexed_documents: 0,
-  sample_urls: [],
-  indexed_statutes: 1543,
-  jurisdictions: ["California"],
-  last_eval_run_at: null,
-  last_eval_recall_at_5: null,
-  last_eval_citation_recall_at_1: null,
-};
+function makeStatus(overrides: Partial<StatusResponse> = {}): StatusResponse {
+  return {
+    indexed_documents: 0,
+    sample_urls: [],
+    indexed_statutes: 0,
+    jurisdictions: [],
+    last_eval_run_at: null,
+    last_eval_recall_at_5: null,
+    last_eval_citation_recall_at_1: null,
+    ...overrides,
+  };
+}
 
 describe("DatasetStatus", () => {
   afterEach(() => {
@@ -30,44 +33,51 @@ describe("DatasetStatus", () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 
-  it("shows the indexed_statutes count after a successful fetch", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue(BASE_STATUS);
+  it("shows indexed statute count after a successful fetch", async () => {
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({ indexed_statutes: 1547, jurisdictions: ["California"] })
+    );
     render(<DatasetStatus />);
     await waitFor(() => {
-      expect(
-        screen.getByText(/1,543 statutes indexed/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/1,547 statutes indexed/i)).toBeInTheDocument();
     });
   });
 
   it("shows the jurisdiction list after a successful fetch", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue({
-      ...BASE_STATUS,
-      jurisdictions: ["California", "Texas"],
-    });
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({
+        indexed_statutes: 100,
+        jurisdictions: ["California", "Texas"],
+      })
+    );
     render(<DatasetStatus />);
     await waitFor(() => {
-      expect(screen.getByText(/California, Texas/)).toBeInTheDocument();
+      expect(screen.getByText(/California, Texas/i)).toBeInTheDocument();
     });
   });
 
   it("renders an eval recall@5 badge when last_eval_recall_at_5 is set", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue({
-      ...BASE_STATUS,
-      last_eval_recall_at_5: 0.87,
-      last_eval_run_at: "2026-05-09T13:30:00.000Z",
-    });
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({
+        indexed_statutes: 41,
+        jurisdictions: ["California"],
+        last_eval_recall_at_5: 0.87,
+        last_eval_run_at: "2026-05-09T13:30:00.000Z",
+      })
+    );
     render(<DatasetStatus />);
     await waitFor(() => {
-      expect(screen.getByText(/eval r@5: 0\.87/i)).toBeInTheDocument();
+      expect(screen.getByText(/recall@5 87%/i)).toBeInTheDocument();
     });
   });
 
   it("hides the eval badge when last_eval_recall_at_5 is null", async () => {
-    jest.mocked(api.getStatus).mockResolvedValue(BASE_STATUS);
+    jest.mocked(api.getStatus).mockResolvedValue(
+      makeStatus({ indexed_statutes: 41, jurisdictions: ["California"] })
+    );
     render(<DatasetStatus />);
     await waitFor(() => screen.getByText(/statutes indexed/i));
-    expect(screen.queryByText(/eval r@5/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/recall@5/i)).not.toBeInTheDocument();
   });
 
   it("shows 'Backend offline' error when the fetch fails", async () => {

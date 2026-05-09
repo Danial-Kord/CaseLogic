@@ -1,9 +1,9 @@
 import { strings } from "@/lib/i18n/en";
-import type { StatuteOut } from "@/lib/types";
+import type { StatuteDetail } from "@/lib/types";
 
 interface StatuteMetadataProps {
   statute: Pick<
-    StatuteOut,
+    StatuteDetail,
     "jurisdiction" | "division" | "chapter" | "subdivision"
   >;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { strings } from "@/lib/i18n/en";
-import type { StatuteOut } from "@/lib/types";
+import type { StatuteDetail } from "@/lib/types";
 import FactorChips from "../shared/FactorChips";
 import StatuteMetadata from "./StatuteMetadata";
 import SourceProvenance from "./SourceProvenance";
@@ -13,7 +13,7 @@ interface SourceViewerProps {
 }
 
 export default function SourceViewer({ statuteId }: SourceViewerProps) {
-  const [statute, setStatute] = useState<StatuteOut | null>(null);
+  const [statute, setStatute] = useState<StatuteDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
