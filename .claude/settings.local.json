@@ -10,7 +10,10 @@
       "Bash(xargs ls -la)",
       "Bash(.venv/bin/python *)",
       "Bash(python3 -m json.tool)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('chat:', d['chat_id'], '|', d['title']\\); print\\('messages:', len\\(d['messages']\\)\\); print\\('first msg:', d['messages'][0]['role'], '-', d['messages'][0]['content'][:50]\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('chat:', d['chat_id'], '|', d['title']\\); print\\('messages:', len\\(d['messages']\\)\\); print\\('first msg:', d['messages'][0]['role'], '-', d['messages'][0]['content'][:50]\\)\")",
+      "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['chat_id']\\)\")",
+      "Bash(xargs -I {} curl -s -X POST http://localhost:8000/chats/{}/messages -H \"Content-Type: application/json\" -d '{\"content\": \"Quick rundown on rear-end collision liability statutes.\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d['assistant_message']['content']\\)\")"
     ]
   }
 }

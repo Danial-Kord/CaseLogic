@@ -149,6 +149,23 @@ class Chat(Base):
     )
 
 
+class Profile(Base):
+    """Single-user demo profile. Always row id=1 (singleton). Free-text
+    `about` field is concatenated into the chat system prompt so the LLM
+    can tailor its response style."""
+
+    __tablename__ = "profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    role: Mapped[str] = mapped_column(String(128), default="")
+    firm: Mapped[str] = mapped_column(String(256), default="")
+    about: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class ChatMessage(Base):
     """One message in a Chat. `hits_json` (assistant only) stores the
     serialized list of StatuteHitOut dicts that were retrieved for the

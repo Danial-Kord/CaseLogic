@@ -12,6 +12,10 @@ import logging
 import os
 from typing import Tuple
 
+from sqlalchemy import select
+
+from backend.db import get_session
+from backend.models import Profile
 from backend.retrieval import StatuteHit, retrieve
 
 logger = logging.getLogger(__name__)
@@ -29,9 +33,10 @@ invent new ones.
 Hard rules:
 - Cite statutes by their universal_citation (e.g. "Cal. Veh. Code § 23152(a)").
 - If the retrieved statutes do not directly address the question, say so plainly.
-- Do NOT provide legal advice. End every response with: "Not legal advice — research only."
 - Keep responses under ~180 words. Plain prose. Bullets only when listing 3+ statutes.
 - Never claim something a retrieved statute does not say.
+- Do NOT add a disclaimer like "Not legal advice" — the surrounding UI already
+  shows one site-wide. Just answer the research question.
 """
 
 
@@ -43,11 +48,43 @@ def respond_to_query(
     """Run retrieval + LLM answer. Returns (answer_text, hits)."""
 
     hits = retrieve(query=query, factor=factor, top_k=top_k)
-    text = _answer(query, hits)
+    profile_block = _profile_block()
+    text = _answer(query, hits, profile_block)
     return text, hits
 
 
-def _answer(query: str, hits: list[StatuteHit]) -> str:
+def _profile_block() -> str | None:
+    """Read the demo profile and render it as a system-prompt block.
+    Returns None if the profile is empty (no personalization)."""
+    try:
+        with get_session() as session:
+            profile = session.scalar(select(Profile).limit(1))
+    except Exception:  # pragma: no cover — DB may be missing during boot
+        return None
+
+    if profile is None:
+        return None
+
+    parts = []
+    if profile.name:
+        header = profile.name
+        if profile.role:
+            header += f", {profile.role}"
+        if profile.firm:
+            header += f" at {profile.firm}"
+        parts.append(f"You are speaking with {header}.")
+    if profile.about:
+        parts.append(f"About them: {profile.about.strip()}")
+    if not parts:
+        return None
+    parts.append(
+        "Tailor depth, terminology, and which fact patterns you emphasize "
+        "to this user. Do not address them by name in every message."
+    )
+    return "\n".join(parts)
+
+
+def _answer(query: str, hits: list[StatuteHit], profile_block: str | None) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return _stub_answer(query, hits)
@@ -58,16 +95,22 @@ def _answer(query: str, hits: list[StatuteHit]) -> str:
         client = Anthropic(api_key=api_key)
         retrieved = _format_retrieved(hits)
 
+        # Stable base prompt is cached; per-user profile is a separate block
+        # so the cache hit rate stays high even when the profile changes.
+        system_blocks: list[dict] = [
+            {
+                "type": "text",
+                "text": ANSWER_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        if profile_block:
+            system_blocks.append({"type": "text", "text": profile_block})
+
         msg = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=400,
-            system=[
-                {
-                    "type": "text",
-                    "text": ANSWER_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
+            system=system_blocks,
             messages=[
                 {
                     "role": "user",
@@ -105,8 +148,7 @@ def _stub_answer(query: str, hits: list[StatuteHit], error: str | None = None) -
     if not hits:
         return (
             f'No matching California Vehicle Code statutes found for "{query}". '
-            'Try rephrasing or searching by citation (e.g. "Cal. Veh. Code § 23152").\n\n'
-            "Not legal advice — research only."
+            'Try rephrasing or searching by citation (e.g. "Cal. Veh. Code § 23152").'
         )
 
     top = hits[:3]
@@ -116,7 +158,6 @@ def _stub_answer(query: str, hits: list[StatuteHit], error: str | None = None) -
         if len(snippet) > 220:
             snippet = snippet[:220].rstrip() + "…"
         lines.append(f"- **{h.universal_citation}** — {snippet}")
-    lines.append("\nNot legal advice — research only.")
 
     out = "\n".join(lines)
     if error:

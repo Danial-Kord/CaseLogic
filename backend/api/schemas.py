@@ -147,3 +147,21 @@ class SendMessageResponse(BaseModel):
     user_message: ChatMessageOut
     assistant_message: ChatMessageOut
     chat_title: str
+
+
+# --- Profile (single-user demo) ---------------------------------------------
+
+
+class ProfileOut(BaseModel):
+    name: str = ""
+    role: str = ""
+    firm: str = ""
+    about: str = ""
+    updated_at: Optional[datetime] = None
+
+
+class ProfileUpdate(BaseModel):
+    name: str = Field("", max_length=128)
+    role: str = Field("", max_length=128)
+    firm: str = Field("", max_length=256)
+    about: str = Field("", max_length=2048)
