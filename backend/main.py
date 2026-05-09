@@ -23,9 +23,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Allow any localhost / 127.0.0.1 origin on any dev port. Browsers treat
+# `localhost` and `127.0.0.1` as distinct origins, and Vite/Next pick
+# different ports when one is busy — pinning a single value caused dev
+# preflights (OPTIONS) to 400 with "Disallowed CORS origin".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

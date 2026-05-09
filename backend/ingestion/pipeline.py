@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.config import Settings, load_settings
 from backend.db import get_session
 from backend.ingestion.adapters.base import RawDocument, SearchResult
-from backend.models import Document, Statute
+from backend.models import Document, Statute, StatuteFactor
 
 
 log = logging.getLogger(__name__)
@@ -167,6 +167,8 @@ def ingest_ca_vehicle_code(
     """
     from backend.ingestion.adapters.ca_statute import CaStatuteAdapter, base_section, subdivision_of, make_statute_id
     from backend.parsing.html_parse import parse_leginfo_section
+    from backend.retrieval import normalize_subdivision
+    from backend.extraction.factors import is_known_factor
 
     settings = settings or load_settings()
     adapter = CaStatuteAdapter(cache_dir=cache_dir) if cache_dir else CaStatuteAdapter()
@@ -209,7 +211,10 @@ def ingest_ca_vehicle_code(
         for row in section_rows:
             sec_num_full = row["Section #"].strip()
             statute_id = make_statute_id("CA", "VEH", sec_num_full)
-            subdiv = subdivision_of(sec_num_full)
+            # Store subdivision in canonical bare-letter form ("a", "a-b") so
+            # downstream code (embeddings, API responses) doesn't have to deal
+            # with "(a)" vs "a" ambiguity. None for bare sections.
+            subdiv = normalize_subdivision(subdivision_of(sec_num_full)) or None
 
             statute = Statute(
                 statute_id=statute_id,
@@ -226,6 +231,14 @@ def ingest_ca_vehicle_code(
                 retrieved_at=datetime.now(timezone.utc),
             )
 
+            factor_value = (row.get("Contributing Factor") or "").strip()
+            factor_quote = row["Statute Language"].strip()[:240] or None
+            factor_known = bool(factor_value) and is_known_factor(factor_value)
+            if factor_value and not factor_known:
+                failures.append(
+                    f"unknown factor {factor_value!r} on § {sec_num_full} — tag dropped"
+                )
+
             try:
                 with get_session() as session:
                     existing = session.scalar(
@@ -233,9 +246,27 @@ def ingest_ca_vehicle_code(
                     )
                     if existing:
                         rows_skipped += 1
-                        continue
-                    session.add(statute)
-                rows_persisted += 1
+                    else:
+                        session.add(statute)
+                        session.flush()
+                        rows_persisted += 1
+
+                    if factor_known:
+                        already_tagged = session.scalar(
+                            select(StatuteFactor).where(
+                                StatuteFactor.statute_id == statute_id,
+                                StatuteFactor.factor == factor_value,
+                            )
+                        )
+                        if not already_tagged:
+                            session.add(
+                                StatuteFactor(
+                                    statute_id=statute_id,
+                                    factor=factor_value,
+                                    confidence=1.0,
+                                    quote=factor_quote,
+                                )
+                            )
             except IntegrityError:
                 rows_skipped += 1
             except Exception as exc:
@@ -358,7 +389,7 @@ def ingest_ca_vehicle_code_divisions(
                 code_name="VEH",
                 section_number=sec_str,
                 universal_citation=f"Cal. Veh. Code § {sec_str}",
-                subdivision="",
+                subdivision=None,
                 division=parsed.get("division"),
                 chapter=parsed.get("chapter"),
                 statute_text=parsed.get("statute_text"),

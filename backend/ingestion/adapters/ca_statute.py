@@ -65,13 +65,23 @@ def subdivision_of(section_num: str) -> str:
 def make_statute_id(jurisdiction: str, code: str, section_num: str) -> str:
     """Build a stable, URL-safe identifier slug.
 
+    Thin wrapper that splits ``section_num`` (e.g. ``"21453(a)-(b)"``) into
+    its base + subdivision parts and delegates to the canonical builder in
+    ``backend.retrieval``. One implementation, one source of drift.
+
     Examples:
         ('CA', 'VEH', '21453(a)-(b)') -> 'ca-veh-21453-a-b'
         ('CA', 'VEH', '2800.1(a)')    -> 'ca-veh-2800-1-a'
         ('CA', 'VEH', '22350')        -> 'ca-veh-22350'
     """
-    sanitized = re.sub(r"[^a-zA-Z0-9]+", "-", section_num).lower().strip("-")
-    return f"{jurisdiction.lower()}-{code.lower()}-{sanitized}"
+    from backend.retrieval import make_statute_id as _canonical_make_statute_id
+
+    return _canonical_make_statute_id(
+        jurisdiction=jurisdiction,
+        code_name=code,
+        section_number=base_section(section_num),
+        subdivision=subdivision_of(section_num) or None,
+    )
 
 
 class CaStatuteAdapter:
