@@ -418,3 +418,172 @@ def ingest_ca_vehicle_code_divisions(
         sections_missing=missing,
         failures=failures,
     )
+
+
+# ---------------------------------------------------------------------------
+# Generic multi-state walk
+# ---------------------------------------------------------------------------
+
+def ingest_state_statutes(
+    jurisdiction: str,
+    code_name: str,
+    universal_citation_fmt: str,
+    adapter,
+    section_keys: list[str],
+    parse_fn,
+) -> DivisionWalkReport:
+    """Generic walk over an arbitrary list of section keys.
+
+    Args:
+        jurisdiction:           e.g. "FL", "NY", "WA"
+        code_name:              e.g. "STAT", "VAT", "RCW"
+        universal_citation_fmt: e.g. "Fla. Stat. § {section}"
+        adapter:                FlStatuteAdapter / NyStatuteAdapter / WaStatuteAdapter
+        section_keys:           list of strings to pass to adapter.fetch_section_html()
+        parse_fn:               parse_fl_section / parse_ny_section / parse_wa_section
+
+    Returns DivisionWalkReport with the same counters used by the CA walk.
+    """
+    from backend.retrieval import make_statute_id
+
+    with get_session() as session:
+        existing_ids: set[str] = set(session.scalars(select(Statute.statute_id)).all())
+
+    attempted = 0
+    found = 0
+    persisted = 0
+    skipped = 0
+    missing = 0
+    failures: list[str] = []
+
+    for sec_key in section_keys:
+        attempted += 1
+        statute_id = make_statute_id(jurisdiction, code_name, sec_key)
+
+        if statute_id in existing_ids:
+            skipped += 1
+            continue
+
+        url = adapter.section_url(sec_key)
+        try:
+            html = adapter.fetch_section_html(sec_key)
+        except Exception as exc:
+            failures.append(f"fetch {sec_key}: {exc}")
+            continue
+
+        if html is None:
+            missing += 1
+            continue
+
+        found += 1
+
+        try:
+            parsed = parse_fn(html, url)
+        except Exception as exc:
+            failures.append(f"parse {sec_key}: {exc}")
+            continue
+
+        if not parsed.get("statute_text"):
+            missing += 1
+            found -= 1
+            continue
+
+        # Use the section_number returned by the parser when available
+        section_number = parsed.get("section_number") or sec_key
+
+        statute = Statute(
+            statute_id=statute_id,
+            jurisdiction=jurisdiction,
+            code_name=code_name,
+            section_number=section_number,
+            universal_citation=universal_citation_fmt.format(section=sec_key),
+            subdivision=None,
+            division=parsed.get("division"),
+            chapter=parsed.get("chapter"),
+            statute_text=parsed.get("statute_text"),
+            complete_statute=parsed.get("statute_text"),
+            official_url=url,
+            retrieved_at=datetime.now(timezone.utc),
+        )
+
+        try:
+            with get_session() as session:
+                session.add(statute)
+            existing_ids.add(statute_id)
+            persisted += 1
+        except IntegrityError:
+            skipped += 1
+        except Exception as exc:
+            failures.append(f"persist {sec_key}: {exc}")
+
+    return DivisionWalkReport(
+        sections_attempted=attempted,
+        sections_found=found,
+        sections_persisted=persisted,
+        sections_skipped=skipped,
+        sections_missing=missing,
+        failures=failures,
+    )
+
+
+def ingest_fl_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest Florida Statutes Chapter 316 (State Uniform Traffic Control)."""
+    from backend.ingestion.adapters.fl_statute import FlStatuteAdapter, FL_CHAPTER_316_RANGE
+    from backend.parsing.html_parse import parse_fl_section
+
+    adapter = FlStatuteAdapter(cache_dir=cache_dir)
+    start, end = FL_CHAPTER_316_RANGE
+    section_keys = [f"316.{i:03d}" for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="FL",
+        code_name="STAT",
+        universal_citation_fmt="Fla. Stat. § {section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_fl_section,
+    )
+    adapter.close()
+    return report
+
+
+def ingest_ny_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest New York Vehicle & Traffic Law Articles 21 + 30 (sections 1100–1299)."""
+    from backend.ingestion.adapters.ny_statute import NyStatuteAdapter, NY_VAT_RANGE
+    from backend.parsing.html_parse import parse_ny_section
+
+    adapter = NyStatuteAdapter(cache_dir=cache_dir)
+    start, end = NY_VAT_RANGE
+    section_keys = [str(i) for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="NY",
+        code_name="VAT",
+        universal_citation_fmt="N.Y. Veh. & Traf. Law § {section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_ny_section,
+    )
+    adapter.close()
+    return report
+
+
+def ingest_wa_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest Washington RCW Chapter 46.61 (Rules of the Road)."""
+    from backend.ingestion.adapters.wa_statute import WaStatuteAdapter, WA_RCW_46_61_RANGE
+    from backend.parsing.html_parse import parse_wa_section
+
+    adapter = WaStatuteAdapter(cache_dir=cache_dir)
+    start, end = WA_RCW_46_61_RANGE
+    section_keys = [f"{i:03d}" for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="WA",
+        code_name="RCW",
+        universal_citation_fmt="RCW 46.61.{section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_wa_section,
+    )
+    adapter.close()
+    return report

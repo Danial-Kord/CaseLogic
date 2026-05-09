@@ -49,6 +49,7 @@ CANDIDATE_TOP_K = 50
 def retrieve(
     query: str,
     factor: str | None = None,
+    jurisdiction: str | None = None,
     top_k: int = 10,
 ) -> list[StatuteHit]:
     """Public entry point. See module docstring for the pipeline."""
@@ -65,13 +66,28 @@ def retrieve(
                 hit.matched_via = "citation"
                 return [hit]
 
-        # 2. Factor pre-filter
+        # 2. Pre-filters: jurisdiction and/or factor narrow the allow_ids set
         allow_ids: list[str] | None = None
+
+        if jurisdiction:
+            jur_ids = _statute_ids_for_jurisdiction(session, jurisdiction.upper())
+            if not jur_ids:
+                log.info("retrieve: jurisdiction %r matched zero statutes", jurisdiction)
+                return []
+            allow_ids = jur_ids
+
         if factor:
-            allow_ids = _statute_ids_for_factor(session, factor)
-            if not allow_ids:
+            factor_ids = _statute_ids_for_factor(session, factor)
+            if not factor_ids:
                 log.info("retrieve: factor %r matched zero statutes", factor)
                 return []
+            if allow_ids is not None:
+                factor_set = set(factor_ids)
+                allow_ids = [sid for sid in allow_ids if sid in factor_set]
+                if not allow_ids:
+                    return []
+            else:
+                allow_ids = factor_ids
 
         # 3. Backends
         vector_hits = vector_search(query, allow_ids=allow_ids, top_k=CANDIDATE_TOP_K)
@@ -105,6 +121,13 @@ def _exact_lookup(session: Session, statute_id: str) -> StatuteHit | None:
 def _statute_ids_for_factor(session: Session, factor: str) -> list[str]:
     rows = session.execute(
         select(StatuteFactor.statute_id).where(StatuteFactor.factor == factor).distinct()
+    ).all()
+    return [row[0] for row in rows]
+
+
+def _statute_ids_for_jurisdiction(session: Session, jurisdiction: str) -> list[str]:
+    rows = session.execute(
+        select(Statute.statute_id).where(Statute.jurisdiction == jurisdiction).distinct()
     ).all()
     return [row[0] for row in rows]
 

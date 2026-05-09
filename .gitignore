@@ -19,6 +19,7 @@ app.db-journal
 *.sqlite3
 data/raw/web/
 data/raw/ca_statutes/
+data/raw/statutes/
 data/processed/
 data/index/
 data/exports/
