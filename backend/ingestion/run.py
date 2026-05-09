@@ -110,8 +110,8 @@ def main() -> None:
         if args.csv_only:
             print("\n  --csv-only set: skipping division walk.")
         else:
-            print("\n[3] Phase B — full division walk (Div 11 + 11.5)")
-            print("    First run ~40 min; re-runs instant from cache.\n")
+            print("\n[3] Phase B — full CA Vehicle Code walk (all divisions)")
+            print("    First run ~4-6 hrs; re-runs instant from cache.\n")
             walk_report = ingest_ca_vehicle_code_divisions()
             _print_walk_report(walk_report)
 
