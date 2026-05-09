@@ -7,26 +7,15 @@ import { strings } from "@/lib/i18n/en";
 import { statuteDetailToHit } from "@/lib/bookmarksStorage";
 import type { StatuteDetail } from "@/lib/types";
 import FactorChips from "../shared/FactorChips";
-import RelatedGraph from "./RelatedGraph";
 import StatuteMetadata from "./StatuteMetadata";
 import SourceProvenance from "./SourceProvenance";
 import StatuteText from "./StatuteText";
 
 interface SourceViewerProps {
   statuteId: string | null;
-  /**
-   * Optional. When provided, the viewer renders a "Related statutes" graph
-   * underneath the body and calls this callback whenever the user clicks a
-   * neighbor node. The parent (StatuteModal) is expected to push the new
-   * statuteId onto its history stack and re-render the viewer.
-   */
-  onNavigate?: (statuteId: string) => void;
 }
 
-export default function SourceViewer({
-  statuteId,
-  onNavigate,
-}: SourceViewerProps) {
+export default function SourceViewer({ statuteId }: SourceViewerProps) {
   const [statute, setStatute] = useState<StatuteDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,20 +138,6 @@ export default function SourceViewer({
             {strings.sourceViewer.contributingFactors}
           </p>
           <FactorChips factors={statute.factors} />
-        </section>
-      )}
-
-      {onNavigate && (
-        <section>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-brand-muted">
-            {strings.sourceViewer.relatedStatutes}
-          </p>
-          <RelatedGraph
-            statuteId={statute.statute_id}
-            centerCitation={statute.universal_citation}
-            centerJurisdiction={statute.jurisdiction}
-            onNavigate={onNavigate}
-          />
         </section>
       )}
 

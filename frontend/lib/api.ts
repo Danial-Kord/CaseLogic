@@ -6,7 +6,6 @@ import type {
   JurisdictionsResponse,
   MatchedVia,
   Profile,
-  RelatedStatutesResponse,
   SearchRequest,
   SearchResponse,
   SendMessageRequest,
@@ -255,44 +254,6 @@ class ApiClient {
     const res = await fetch(`${this.baseUrl}/statutes/${encoded}`);
     if (res.status === 404) throw new Error("Not found");
     if (!res.ok) throw new Error(`Statute lookup failed: ${res.status}`);
-    return res.json();
-  }
-
-  // GET /statutes/{statute_id}/related. Returns outgoing cross-references
-  // to other rows already present in the corpus. Empty list (not an error)
-  // when the source has no resolvable references.
-  async getRelatedStatutes(
-    statuteId: string,
-  ): Promise<RelatedStatutesResponse> {
-    if (this.mockMode) {
-      await this.simulateLatency(120);
-      // Mock graph: every CA statute is "related" to the others, with a
-      // mention count drawn from text overlap. Good enough to demo the
-      // visualization without hitting a backend.
-      const source = MOCK_STATUTES.find((s) => s.statute_id === statuteId);
-      if (!source) throw new Error("Not found");
-      const related = MOCK_STATUTES.filter(
-        (s) =>
-          s.statute_id !== statuteId &&
-          s.jurisdiction === source.jurisdiction,
-      ).map((s) => ({
-        statute_id: s.statute_id,
-        universal_citation: s.universal_citation,
-        jurisdiction: s.jurisdiction,
-        section_number: s.section_number,
-        subdivision: s.subdivision,
-        snippet: s.statute_text.slice(0, 160),
-        mention_count: 1,
-      }));
-      return { source_statute_id: statuteId, related };
-    }
-
-    const encoded = encodeURIComponent(statuteId);
-    const res = await fetch(`${this.baseUrl}/statutes/${encoded}/related`);
-    if (res.status === 404) throw new Error("Not found");
-    if (!res.ok) {
-      throw new Error(`Related lookup failed: ${res.status}`);
-    }
     return res.json();
   }
 

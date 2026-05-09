@@ -51,24 +51,6 @@ export interface StatuteDetail {
   retrieved_at: string | null;
 }
 
-// One outgoing edge from a statute. Returned by GET /statutes/{slug}/related.
-// The graph visualization (components/SourceViewer/RelatedGraph) consumes
-// these directly.
-export interface RelatedStatute {
-  statute_id: string;
-  universal_citation: string;
-  jurisdiction: string;
-  section_number: string;
-  subdivision: string | null;
-  snippet: string;
-  mention_count: number;
-}
-
-export interface RelatedStatutesResponse {
-  source_statute_id: string;
-  related: RelatedStatute[];
-}
-
 export interface FactorCount {
   factor: string;
   statute_count: number;

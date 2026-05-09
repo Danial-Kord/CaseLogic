@@ -99,19 +99,6 @@ export const strings = {
     copyCitation: "Copy citation",
     copied: "Copied!",
     crossRefTooltip: "Cross-reference to another statute",
-    relatedStatutes: "Related statutes",
-    back: "Back",
-  },
-
-  relatedGraph: {
-    loading: "Mapping related statutes\u2026",
-    error: "Couldn't load related statutes.",
-    empty: "No cross-referenced statutes found in this text.",
-    ariaLabel: (citation: string) =>
-      `Related-statutes graph centered on ${citation}`,
-    showOverflow: (n: number) =>
-      `Show ${n} more related ${n === 1 ? "statute" : "statutes"}`,
-    hideOverflow: "Hide additional",
   },
 
   themeToggle: {

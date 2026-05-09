@@ -79,34 +79,6 @@ class StatuteSearchResponse(BaseModel):
     results: list[StatuteHitOut]
 
 
-class RelatedStatute(BaseModel):
-    """One statute referenced from another statute's text.
-
-    `mention_count` is how many times this row's citation/section number
-    appears in the source statute's combined text — used as a primitive
-    "edge weight" so the graph can size or sort nodes by relevance.
-    """
-
-    statute_id: str
-    universal_citation: str
-    jurisdiction: str
-    section_number: str
-    subdivision: Optional[str] = None
-    snippet: str = Field(
-        "",
-        description="Short preview from the related statute, ~160 chars.",
-    )
-    mention_count: int = Field(1, ge=1)
-
-
-class RelatedStatutesResponse(BaseModel):
-    """Outgoing references from one statute. Edges only — the source row is
-    NOT included; the caller already has it."""
-
-    source_statute_id: str
-    related: list[RelatedStatute]
-
-
 class JurisdictionCount(BaseModel):
     jurisdiction: str
     statute_count: int
