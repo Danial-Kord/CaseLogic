@@ -2,21 +2,19 @@
 
 Exports:
 
-- `StatuteHit` — what `retrieve()` returns. The API's `StatuteHitOut` Pydantic
-  model in `backend.api.schemas` mirrors this 1:1 so routes are thin.
-- `retrieve()` — the hybrid-search entry point (citation fast-path + RRF over
-  vector + keyword, optional factor filter).
+- `StatuteHit` — what `retrieve()` returns.
+- `retrieve()` — hybrid-search entry point (citation fast-path + RRF over
+  vector + keyword, optional factor + jurisdiction filters).
 - `parse_citation()` — turns a free-form citation string into a `statute_id`
-  slug, or `None` if the input doesn't look like a citation. Used by both the
-  retrieve fast-path and any tooling that needs the same canonicalization.
-- `make_statute_id()` — deterministic slug builder (jurisdiction + code +
-  section + subdivision). Person 1 calls this at ingest time; we expose it
-  here so the eval harness uses the same code path.
+  slug, or `None` if the input doesn't look like a recognized citation.
+  Supports CA Vehicle Code, FL Statutes, NY V&T Law, WA RCW.
+- `make_statute_id()` — deterministic slug builder.
 
-`CITATION_REGEX` covers the common forms: `Cal. Veh. Code § 22350`,
-`22350(a)`, bare `22350`. Multi-subdivision forms like `21453(a)-(b)` are
-not parsed here — they fall through to keyword search, which still finds
-them via the FTS5 index over `universal_citation`.
+Jurisdiction coverage:
+  CA VEH  — California Vehicle Code  (cal. veh. code § NNNNN)
+  FL STAT — Florida Statutes Ch 316  (fla. stat. § 316.NNN)
+  NY VAT  — NY Vehicle & Traffic Law  (n.y. veh. & traf. law § NNNN)
+  WA RCW  — Washington RCW 46.61     (rcw 46.61.NNN)
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ import re
 from dataclasses import dataclass, field
 
 __all__ = [
-    "CITATION_REGEX",
     "StatuteHit",
     "make_statute_id",
     "normalize_subdivision",
@@ -34,24 +31,35 @@ __all__ = [
 ]
 
 
-CITATION_REGEX = re.compile(
-    r"""(?ix)
-    (?:cal(?:ifornia)?\.?\s*veh(?:icle)?\.?\s*code\s*)?   # optional code prefix
-    \xa7?\s*                                              # optional section sign
-    (?P<section>\d+(?:\.\d+)?)                            # section number, e.g. 22350 or 22100.5
-    (?:\s*\(\s*(?P<subdivision>[a-z0-9]+)\s*\))?          # optional single subdivision
-    """
-)
-
-
 _SUBDIVISION_SEP = re.compile(r"[()&,/\s]+")
 _SUBDIVISION_DASH = re.compile(r"-+")
 
+# jurisdiction string → canonical slug
+_JURISDICTION_MAP: dict[str, str] = {
+    "california": "ca", "ca": "ca",
+    "florida": "fl", "fl": "fl",
+    "new york": "ny", "newyork": "ny", "ny": "ny",
+    "washington": "wa", "wa": "wa",
+}
+
+# code_name fragment → canonical slug
+# Order matters: more specific patterns must precede shorter ones.
+# "traf" catches "Veh. & Traf. Law" before "veh" can steal it.
+_CODE_MAP: list[tuple[str, str]] = [
+    ("traf", "vat"),          # N.Y. Veh. & Traf. Law
+    ("v&t", "vat"),
+    ("vat", "vat"),
+    ("vehicle and traffic", "vat"),
+    ("vehicle & traffic", "vat"),
+    ("rcw", "rcw"),
+    ("revised code", "rcw"),
+    ("stat", "stat"),         # Fla. Stat.
+    ("veh", "veh"),           # Cal. Veh. Code — must be last
+]
+
 
 def normalize_subdivision(subdivision: str | None) -> str:
-    """Slug-fragment from raw subdivision text: 'a' → 'a', 'a-b' → 'a-b',
-    '(a)&(c)' → 'a-c'. Returns '' for None/empty input."""
-
+    """Slug-fragment: 'a' → 'a', 'a-b' → 'a-b', '(a)&(c)' → 'a-c'. '' for None."""
     if not subdivision:
         return ""
     s = subdivision.lower().strip()
@@ -66,66 +74,109 @@ def make_statute_id(
     section_number: str,
     subdivision: str | None = None,
 ) -> str:
-    """Build the canonical `statute_id` slug.
+    """Build the canonical statute_id slug.
 
-    Phase 1 only handles California Vehicle Code; the slug shape is
-    `ca-veh-{section}` or `ca-veh-{section}-{subdivision}`. When more
-    jurisdictions land in Phase 2 we'll extend the mapping.
+    Slug shape: {jurisdiction}-{code}-{section}[-{subdivision}]
+    e.g.: ca-veh-22350, fl-stat-316-183, ny-vat-1180, wa-rcw-46-61-500
 
-    Section numbers are sanitized to `[a-z0-9-]+` so decimals like
-    `2800.1` become `2800-1` — required to keep the API's
-    `^[a-z0-9-]+$` slug regex valid for every row in the table.
+    Section decimals are turned into dashes (2800.1 → 2800-1) to satisfy the
+    API's ^[a-z0-9-]+$ slug constraint.
     """
-
     j = jurisdiction.strip().lower()
-    if j in {"california", "ca"}:
-        jurisdiction_slug = "ca"
-    else:
-        jurisdiction_slug = re.sub(r"[^a-z0-9]+", "-", j).strip("-") or "xx"
+    jurisdiction_slug = _JURISDICTION_MAP.get(j) or re.sub(r"[^a-z0-9]+", "-", j).strip("-") or "xx"
 
     code = code_name.strip().lower()
-    if "veh" in code:
-        code_slug = "veh"
-    else:
-        code_slug = re.sub(r"[^a-z0-9]+", "-", code).strip("-") or "code"
+    code_slug = "code"
+    for fragment, slug in _CODE_MAP:
+        if fragment in code:
+            code_slug = slug
+            break
 
     section_slug = re.sub(r"[^a-z0-9]+", "-", section_number.lower()).strip("-")
-
     sub = normalize_subdivision(subdivision)
     base = f"{jurisdiction_slug}-{code_slug}-{section_slug}"
     return f"{base}-{sub}" if sub else base
 
 
+# ---------------------------------------------------------------------------
+# Per-jurisdiction citation regex patterns
+# ---------------------------------------------------------------------------
+
+# California Vehicle Code: "Cal. Veh. Code § 22350(a)", "22350(a)", bare "22350"
+_CA_RE = re.compile(
+    r"""(?ix)
+    (?:cal(?:ifornia)?\.?\s*veh(?:icle)?\.?\s*code\s*)?
+    \xa7?\s*
+    (?P<section>\d{4,5}(?:\.\d+)?)
+    (?:\s*\(\s*(?P<subdivision>[a-z0-9]+)\s*\))?
+    """,
+)
+
+# Florida Statutes: "Fla. Stat. § 316.183" or bare "316.183"
+_FL_RE = re.compile(
+    r"""(?ix)
+    (?:fla?(?:\.|\s+stat(?:utes?)?)?\.?\s*)?
+    \xa7?\s*
+    (?P<section>3(?:1[0-9]|0[0-9]|2[0-9])\.\d{1,4})
+    (?:\s*\(\s*(?P<subdivision>[a-z0-9]+)\s*\))?
+    """,
+)
+
+# New York Vehicle & Traffic Law: "N.Y. Veh. & Traf. Law § 1180" or bare "§ 1180"
+_NY_RE = re.compile(
+    r"""(?ix)
+    (?:n\.?y\.?\s*(?:veh(?:icle)?\.?\s*(?:&|and)\s*traf(?:fic)?\.?\s*(?:law)?\s*)?)?
+    \xa7?\s*
+    (?P<section>1[0-9]{3})
+    (?:\s*\(\s*(?P<subdivision>[a-z0-9]+)\s*\))?
+    """,
+)
+
+# Washington RCW: "RCW 46.61.500" or "Wash. Rev. Code § 46.61.500"
+_WA_RE = re.compile(
+    r"""(?ix)
+    (?:(?:wash(?:ington)?\.?\s*)?rev(?:ised)?\.?\s*code\.?\s*(?:wash\.?)?\s*|rcw\s*)
+    \xa7?\s*
+    (?P<section>46\.61\.\d{1,3})
+    (?:\s*\(\s*(?P<subdivision>[a-z0-9]+)\s*\))?
+    """,
+)
+
+_CITATION_PARSERS = [
+    (_WA_RE,  "WA",         "RCW"),
+    (_FL_RE,  "FL",         "Fla. Stat."),
+    (_NY_RE,  "NY",         "N.Y. Veh. & Traf. Law"),
+    (_CA_RE,  "California", "Cal. Veh. Code"),
+]
+
+
 def parse_citation(text: str) -> str | None:
-    """Try to extract a `statute_id` slug from free-form citation text.
+    """Extract a statute_id slug from free-form citation text.
 
-    Returns `None` if the input doesn't look like a CA Vehicle Code citation.
-    Only the first match is used — multi-subdivision strings like
-    `21453(a)-(b)` resolve to `ca-veh-21453-a` and intentionally miss the
-    multi-subdivision row, which keyword search will pick up instead.
+    Tries CA, FL, NY, WA patterns in order. Returns None if no pattern matches.
+    Only the first match per pattern is used.
     """
-
     if not text:
         return None
-    match = CITATION_REGEX.search(text)
-    if not match:
-        return None
-    section = match.group("section")
-    if not section:
-        return None
-    subdivision = match.group("subdivision")
-    return make_statute_id(
-        jurisdiction="California",
-        code_name="Cal. Veh. Code",
-        section_number=section,
-        subdivision=subdivision,
-    )
+    for pattern, jurisdiction, code_name in _CITATION_PARSERS:
+        m = pattern.search(text)
+        if m:
+            section = m.group("section")
+            if not section:
+                continue
+            subdivision = m.group("subdivision") if "subdivision" in pattern.groupindex else None
+            return make_statute_id(
+                jurisdiction=jurisdiction,
+                code_name=code_name,
+                section_number=section,
+                subdivision=subdivision,
+            )
+    return None
 
 
 @dataclass
 class StatuteHit:
-    """One retrieved statute with its rank score. Mirrors the API's
-    `StatuteHitOut` shape so `routes_statutes.py` is a thin pass-through."""
+    """One retrieved statute with its rank score."""
 
     statute_id: str
     universal_citation: str
@@ -146,15 +197,13 @@ class StatuteHit:
 def retrieve(
     query: str,
     factor: str | None = None,
+    jurisdiction: str | None = None,
     top_k: int = 10,
 ) -> list[StatuteHit]:
-    """Hybrid retrieval over CA Vehicle Code statutes.
+    """Hybrid retrieval over all indexed statutes.
 
-    Lazy import of the implementation keeps `from backend.retrieval import
-    StatuteHit` cheap (no Chroma boot) for code paths that just want the
-    types — important for the API layer's startup time.
+    Lazy import keeps `from backend.retrieval import StatuteHit` cheap.
     """
-
     from backend.retrieval.hybrid_search import retrieve as _retrieve
 
-    return _retrieve(query=query, factor=factor, top_k=top_k)
+    return _retrieve(query=query, factor=factor, jurisdiction=jurisdiction, top_k=top_k)

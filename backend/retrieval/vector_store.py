@@ -1,17 +1,16 @@
-"""Chroma persistent vector index over CA Vehicle Code statutes.
+"""Chroma persistent vector index over all indexed statutes (multi-jurisdiction).
 
 Chroma's default embedding function (`all-MiniLM-L6-v2`) is used — no extra
 deps, no extra API key, embedding happens inside Chroma at `add()` and
-`query()` time. For ~1,500 short statute sections this is plenty.
+`query()` time.
 
 Contract:
 
-- One collection named `ca_statutes`.
-- IDs are `statute_id` slugs (e.g. `ca-veh-22350`, `ca-veh-21451-a`).
+- One collection named `statutes` (shared across all jurisdictions).
+- IDs are `statute_id` slugs (e.g. `ca-veh-22350`, `fl-stat-316-183`).
 - Documents are `make_contextual_text(statute)` — prefix + body.
-- Metadata holds the scalar fields we want to filter by (Chroma metadata
-  is scalar-only, so the many-valued `factors` are filtered through SQL
-  in `hybrid_search.retrieve()`, not here).
+- Metadata stores `jurisdiction`, `code_name`, etc. for future filtering.
+  Factor filtering is handled via SQL allowlist in `hybrid_search.retrieve()`.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from backend.retrieval.embeddings import make_contextual_text
 
 log = logging.getLogger(__name__)
 
-COLLECTION_NAME = "ca_statutes"
+COLLECTION_NAME = "statutes"
 
 _client = None
 

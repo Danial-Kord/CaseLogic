@@ -88,3 +88,46 @@ export interface Message {
   timestamp: Date;
   isLoading?: boolean;
 }
+
+// Multi-chat sessions. Mirrors backend/api/schemas.py — see
+// backend/api/routes_chats.py for the contract.
+
+export interface ChatMessage {
+  id: number;
+  role: MessageRole;
+  content: string;
+  hits: StatuteHit[];
+  created_at: string;
+}
+
+export interface ChatSummary {
+  chat_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatDetail {
+  chat_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessage[];
+}
+
+export interface ChatListResponse {
+  chats: ChatSummary[];
+}
+
+export interface SendMessageRequest {
+  content: string;
+  factor?: string;
+  top_k?: number;
+}
+
+export interface SendMessageResponse {
+  user_message: ChatMessage;
+  assistant_message: ChatMessage;
+  chat_title: string;
+}

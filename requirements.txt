@@ -8,3 +8,4 @@ pypdf
 httpx
 python-dotenv
 pydantic
+firecrawl-py

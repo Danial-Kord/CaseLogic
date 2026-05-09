@@ -294,12 +294,45 @@ def _read_csv_rows(csv_path: str) -> list[dict]:
 # Division walk — ingest every section in a numeric range
 # ---------------------------------------------------------------------------
 
-# Ranges to walk for a full CA VEH ingest:
-#   Division 11   — Rules of the Road      [21000 – 23336]
-#   Division 11.5 — DUI Sentencing         [23500 – 23675]
+# Full CA Vehicle Code walk — all divisions.
+# Sections not present on leginfo get a .invalid cache marker (skipped on re-runs).
 _CA_VEH_DIVISIONS: list[tuple[int, int]] = [
+    # Division 1  — Words and Phrases Defined
+    (100, 681),
+    # Division 2  — Administration
+    (1500, 3093),
+    # Division 3  — Registration of Vehicles
+    (4000, 9808),
+    # Division 4  — Special Antitheft Laws
+    (10500, 10904),
+    # Division 5  — Occupational Licensing
+    (11100, 11723),
+    # Division 6  — Drivers' Licenses
+    (12500, 15250),
+    # Division 7  — Financial Responsibility Laws
+    (16000, 16560),
+    # Division 9  — Civil Liability  ← critical for PI
+    (17150, 17714),
+    # Division 10 — Accidents and Accident Reports  ← critical for PI
+    (20000, 20018),
+    # Division 11 — Rules of the Road  (already ingested, cache hit)
     (21000, 23336),
+    # Division 11.5 — DUI Sentencing  (already ingested, cache hit)
     (23500, 23675),
+    # Division 12 — Equipment of Vehicles
+    (24000, 28050),
+    # Division 13 — Towing and Loading
+    (29000, 31620),
+    # Division 14.1 — Transportation of Hazardous Material
+    (32000, 32053),
+    # Division 14.5/14.8 — School Pupils / Safety Regulations
+    (34500, 34672),
+    # Division 15 — Size, Weight, and Load
+    (35000, 35796),
+    # Division 16.5 — Off-Highway Vehicles
+    (38000, 38504),
+    # Division 17 — Offenses and Prosecution
+    (40000, 42207),
 ]
 
 
@@ -418,3 +451,172 @@ def ingest_ca_vehicle_code_divisions(
         sections_missing=missing,
         failures=failures,
     )
+
+
+# ---------------------------------------------------------------------------
+# Generic multi-state walk
+# ---------------------------------------------------------------------------
+
+def ingest_state_statutes(
+    jurisdiction: str,
+    code_name: str,
+    universal_citation_fmt: str,
+    adapter,
+    section_keys: list[str],
+    parse_fn,
+) -> DivisionWalkReport:
+    """Generic walk over an arbitrary list of section keys.
+
+    Args:
+        jurisdiction:           e.g. "FL", "NY", "WA"
+        code_name:              e.g. "STAT", "VAT", "RCW"
+        universal_citation_fmt: e.g. "Fla. Stat. § {section}"
+        adapter:                FlStatuteAdapter / NyStatuteAdapter / WaStatuteAdapter
+        section_keys:           list of strings to pass to adapter.fetch_section_html()
+        parse_fn:               parse_fl_section / parse_ny_section / parse_wa_section
+
+    Returns DivisionWalkReport with the same counters used by the CA walk.
+    """
+    from backend.retrieval import make_statute_id
+
+    with get_session() as session:
+        existing_ids: set[str] = set(session.scalars(select(Statute.statute_id)).all())
+
+    attempted = 0
+    found = 0
+    persisted = 0
+    skipped = 0
+    missing = 0
+    failures: list[str] = []
+
+    for sec_key in section_keys:
+        attempted += 1
+        statute_id = make_statute_id(jurisdiction, code_name, sec_key)
+
+        if statute_id in existing_ids:
+            skipped += 1
+            continue
+
+        url = adapter.section_url(sec_key)
+        try:
+            html = adapter.fetch_section_html(sec_key)
+        except Exception as exc:
+            failures.append(f"fetch {sec_key}: {exc}")
+            continue
+
+        if html is None:
+            missing += 1
+            continue
+
+        found += 1
+
+        try:
+            parsed = parse_fn(html, url)
+        except Exception as exc:
+            failures.append(f"parse {sec_key}: {exc}")
+            continue
+
+        if not parsed.get("statute_text"):
+            missing += 1
+            found -= 1
+            continue
+
+        # Use the section_number returned by the parser when available
+        section_number = parsed.get("section_number") or sec_key
+
+        statute = Statute(
+            statute_id=statute_id,
+            jurisdiction=jurisdiction,
+            code_name=code_name,
+            section_number=section_number,
+            universal_citation=universal_citation_fmt.format(section=sec_key),
+            subdivision="",
+            division=parsed.get("division"),
+            chapter=parsed.get("chapter"),
+            statute_text=parsed.get("statute_text"),
+            complete_statute=parsed.get("statute_text"),
+            official_url=url,
+            retrieved_at=datetime.now(timezone.utc),
+        )
+
+        try:
+            with get_session() as session:
+                session.add(statute)
+            existing_ids.add(statute_id)
+            persisted += 1
+        except IntegrityError:
+            skipped += 1
+        except Exception as exc:
+            failures.append(f"persist {sec_key}: {exc}")
+
+    return DivisionWalkReport(
+        sections_attempted=attempted,
+        sections_found=found,
+        sections_persisted=persisted,
+        sections_skipped=skipped,
+        sections_missing=missing,
+        failures=failures,
+    )
+
+
+def ingest_fl_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest Florida Statutes Chapter 316 (State Uniform Traffic Control)."""
+    from backend.ingestion.adapters.fl_statute import FlStatuteAdapter, FL_CHAPTER_316_RANGE
+    from backend.parsing.html_parse import parse_fl_section
+
+    adapter = FlStatuteAdapter(cache_dir=cache_dir)
+    start, end = FL_CHAPTER_316_RANGE
+    section_keys = [f"316.{i:03d}" for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="FL",
+        code_name="STAT",
+        universal_citation_fmt="Fla. Stat. § {section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_fl_section,
+    )
+    adapter.close()
+    return report
+
+
+def ingest_ny_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest New York Vehicle & Traffic Law Articles 21 + 30 (sections 1100–1299)."""
+    from backend.ingestion.adapters.ny_statute import NyStatuteAdapter, NY_VAT_RANGE
+    from backend.parsing.html_parse import parse_ny_section
+
+    adapter = NyStatuteAdapter(cache_dir=cache_dir)
+    start, end = NY_VAT_RANGE
+    section_keys = [str(i) for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="NY",
+        code_name="VAT",
+        universal_citation_fmt="N.Y. Veh. & Traf. Law § {section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_ny_section,
+    )
+    adapter.close()
+    return report
+
+
+def ingest_wa_statutes(cache_dir: str | None = None) -> DivisionWalkReport:
+    """Ingest Washington RCW Chapter 46.61 (Rules of the Road)."""
+    from backend.ingestion.adapters.wa_statute import WaStatuteAdapter, WA_RCW_46_61_RANGE
+    from backend.parsing.html_parse import parse_wa_section
+
+    adapter = WaStatuteAdapter(cache_dir=cache_dir)
+    start, end = WA_RCW_46_61_RANGE
+    section_keys = [f"{i:03d}" for i in range(start, end + 1)]
+
+    report = ingest_state_statutes(
+        jurisdiction="WA",
+        code_name="RCW",
+        universal_citation_fmt="RCW 46.61.{section}",
+        adapter=adapter,
+        section_keys=section_keys,
+        parse_fn=parse_wa_section,
+    )
+    adapter.close()
+    return report
