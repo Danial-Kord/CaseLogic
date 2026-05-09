@@ -35,7 +35,7 @@ WA_RCW_46_61_RANGE = (1, 990)
 
 
 def _section_exists(html: str) -> bool:
-    return 'class="section-page"' in html
+    return "section-page" in html
 
 
 class WaStatuteAdapter:
