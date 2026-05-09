@@ -16,13 +16,16 @@ stay where they are — they back the smoke tests and the demo curl scripts.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -268,7 +271,10 @@ def send_message(
     chat_id: str = Path(..., min_length=8, max_length=64),
 ) -> SendMessageResponse:
     """Send a user message and return both the user + assistant rows in the
-    shape the existing ChatThread component expects."""
+    shape the existing ChatThread component expects.
+
+    Non-streaming. For a live progress trace, use the `/stream` variant.
+    """
 
     with get_session() as db:
         try:
@@ -279,35 +285,138 @@ def send_message(
             )
         except SessionNotFound:
             raise HTTPException(status_code=404, detail="chat not found")
+        return _build_send_response(db, chat_id, payload.content, turn)
 
-        # Enrich + persist hits on the *final* assistant row so reloads keep
-        # rendering them.
-        enriched_hits = _enrich_hits(db, turn.statute_hits)
-        assistant_row = _last_assistant_row(db, chat_id)
-        if assistant_row is not None:
-            assistant_row.hits_json = json.dumps(
-                [h.model_dump(mode="json") for h in enriched_hits],
-                ensure_ascii=False,
+
+# ------------------------------ POST /chats/{chat_id}/messages/stream
+
+
+@router.post("/{chat_id}/messages/stream")
+async def stream_message(
+    payload: SendMessageRequest,
+    chat_id: str = Path(..., min_length=8, max_length=64),
+) -> StreamingResponse:
+    """Same as `/messages` but streams a live trace of the agent's tool
+    calls and reasoning over Server-Sent Events.
+
+    Event types (each frame is `data: <json>\\n\\n`):
+
+      - `started`    : the agent has accepted the request
+      - `thinking`   : { step, label } — Claude is being called
+      - `thought`    : { text } — Claude emitted intermediate reasoning
+      - `tool_start` : { name, label, input }
+      - `tool_done`  : { name, summary, count }
+      - `drafting`   : Claude is composing the final answer
+      - `final`      : { user_message, assistant_message, chat_title }
+      - `error`      : { detail, status }
+
+    The terminal event is always `final` or `error` — the stream closes
+    immediately after.
+    """
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str | None, dict[str, Any]]] = asyncio.Queue()
+
+    def on_event(event_type: str, data: dict[str, Any]) -> None:
+        # Fired on the worker thread; bridge it onto the event loop.
+        loop.call_soon_threadsafe(queue.put_nowait, (event_type, data))
+
+    def run_in_thread() -> None:
+        try:
+            with get_session() as db:
+                try:
+                    turn: AgentTurn = run_agent_turn(
+                        db=db,
+                        session_id=chat_id,
+                        user_message=payload.content,
+                        on_event=on_event,
+                    )
+                except SessionNotFound:
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        ("error", {"detail": "chat not found", "status": 404}),
+                    )
+                    loop.call_soon_threadsafe(queue.put_nowait, (None, {}))
+                    return
+                response = _build_send_response(db, chat_id, payload.content, turn)
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                ("final", response.model_dump(mode="json")),
+            )
+        except Exception as exc:  # defensive — never wedge the stream
+            log.exception("stream_message: agent raised")
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                ("error", {"detail": str(exc), "status": 500}),
+            )
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, (None, {}))
+
+    asyncio.create_task(asyncio.to_thread(run_in_thread))
+
+    async def sse_iter() -> AsyncIterator[bytes]:
+        # Send a comment first so the client knows the stream opened. Some
+        # proxies buffer until the first byte; this also primes nginx etc.
+        yield b": chat-stream open\n\n"
+        while True:
+            event_type, data = await queue.get()
+            if event_type is None:
+                break
+            payload_dict = {"type": event_type, **data}
+            yield f"data: {json.dumps(payload_dict, ensure_ascii=False)}\n\n".encode(
+                "utf-8"
             )
 
-        user_row = _last_user_row(db, chat_id)
-        session_row = get_session_row(db, chat_id)
-        title = (session_row.title if session_row else None) or DEFAULT_TITLE
+    return StreamingResponse(
+        sse_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable nginx buffering for SSE
+            "Connection": "keep-alive",
+        },
+    )
 
-        user_message = FrontendChatMessage(
-            id=user_row.id if user_row else 0,
-            role="user",
-            content=payload.content,
-            hits=[],
-            created_at=user_row.created_at if user_row else turn.created_at,
+
+def _build_send_response(
+    db: Session,
+    chat_id: str,
+    user_text: str,
+    turn: AgentTurn,
+) -> SendMessageResponse:
+    """Shared post-agent handling for both /messages and /messages/stream.
+
+    Enriches statute hits against the `statutes` table, persists the hit
+    JSON onto the final assistant row so reloads keep rendering result
+    cards, and returns the frontend-shaped pair.
+    """
+
+    enriched_hits = _enrich_hits(db, turn.statute_hits)
+    assistant_row = _last_assistant_row(db, chat_id)
+    if assistant_row is not None:
+        assistant_row.hits_json = json.dumps(
+            [h.model_dump(mode="json") for h in enriched_hits],
+            ensure_ascii=False,
         )
-        assistant_message = FrontendChatMessage(
-            id=assistant_row.id if assistant_row else 0,
-            role="assistant",
-            content=turn.assistant_text or "",
-            hits=enriched_hits,
-            created_at=assistant_row.created_at if assistant_row else turn.created_at,
-        )
+
+    user_row = _last_user_row(db, chat_id)
+    session_row = get_session_row(db, chat_id)
+    title = (session_row.title if session_row else None) or DEFAULT_TITLE
+
+    user_message = FrontendChatMessage(
+        id=user_row.id if user_row else 0,
+        role="user",
+        content=user_text,
+        hits=[],
+        created_at=user_row.created_at if user_row else turn.created_at,
+    )
+    assistant_message = FrontendChatMessage(
+        id=assistant_row.id if assistant_row else 0,
+        role="assistant",
+        content=turn.assistant_text or "",
+        hits=enriched_hits,
+        created_at=assistant_row.created_at if assistant_row else turn.created_at,
+    )
 
     return SendMessageResponse(
         user_message=user_message,

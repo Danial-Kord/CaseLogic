@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatDetail, ChatMessage, StatuteHit } from "@/lib/types";
+import type {
+  ChatDetail,
+  ChatMessage,
+  StatuteHit,
+  ThinkingStep,
+} from "@/lib/types";
 import ResultsPanel from "./ResultsPanel";
 
 interface ChatThreadProps {
   chat: ChatDetail | null;
   isSending: boolean;
+  thinkingSteps: ThinkingStep[];
   onSend: (content: string) => void;
   onSelectStatute: (hit: StatuteHit) => void;
 }
@@ -14,6 +20,7 @@ interface ChatThreadProps {
 export default function ChatThread({
   chat,
   isSending,
+  thinkingSteps,
   onSend,
   onSelectStatute,
 }: ChatThreadProps) {
@@ -22,7 +29,7 @@ export default function ChatThread({
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat?.messages.length, isSending]);
+  }, [chat?.messages.length, isSending, thinkingSteps.length]);
 
   function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -73,7 +80,7 @@ export default function ChatThread({
               onSelectStatute={onSelectStatute}
             />
           ))}
-          {isSending && <PendingAssistant />}
+          {isSending && <ThinkingTrace steps={thinkingSteps} />}
           <div ref={endRef} />
         </div>
       </div>
@@ -148,12 +155,119 @@ function MessageBubble({
   );
 }
 
-function PendingAssistant() {
+// Live trace of what the agent is doing this turn — replaces the old
+// static "Searching…" placeholder. Each entry corresponds to one event
+// from the SSE stream in `lib/api.ts#streamChatMessage`.
+function ThinkingTrace({ steps }: { steps: ThinkingStep[] }) {
+  // While we haven't received any events yet (initial moment between
+  // `setIsSending(true)` and the first frame), show a generic placeholder
+  // so the UI doesn't flash empty.
+  if (steps.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-brand-muted">
+        <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-brand-accent" />
+        <span>Thinking…</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 text-sm text-brand-muted">
-      <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-brand-accent" />
-      <span>Searching statutes & drafting answer…</span>
+    <div className="rounded-lg border border-brand-border bg-brand-bg/40 px-4 py-3">
+      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-brand-muted">
+        Thinking
+      </p>
+      <ul className="space-y-1.5">
+        {steps.map((step, i) => (
+          <ThinkingStepRow key={i} step={step} isLast={i === steps.length - 1} />
+        ))}
+      </ul>
     </div>
+  );
+}
+
+function ThinkingStepRow({
+  step,
+  isLast,
+}: {
+  step: ThinkingStep;
+  isLast: boolean;
+}) {
+  const indicator = renderIndicator(step, isLast);
+
+  if (step.kind === "thought") {
+    return (
+      <li className="flex items-start gap-2 text-sm">
+        {indicator}
+        <span className="italic text-brand-muted">{step.text}</span>
+      </li>
+    );
+  }
+
+  if (step.kind === "tool") {
+    return (
+      <li className="flex items-start gap-2 text-sm">
+        {indicator}
+        <div className="flex-1">
+          <p className="text-brand-secondary">{step.label}</p>
+          {step.summary && (
+            <p className="text-xs text-brand-muted">{step.summary}</p>
+          )}
+        </div>
+      </li>
+    );
+  }
+
+  if (step.kind === "drafting") {
+    return (
+      <li className="flex items-start gap-2 text-sm">
+        {indicator}
+        <span className="text-brand-secondary">Drafting answer…</span>
+      </li>
+    );
+  }
+
+  // thinking
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      {indicator}
+      <span className="text-brand-secondary">{step.label}</span>
+    </li>
+  );
+}
+
+function renderIndicator(step: ThinkingStep, isLast: boolean) {
+  // For tool steps, indicator depends on status; for everything else, the
+  // last entry shows a spinner and earlier entries show a checkmark dot.
+  if (step.kind === "tool") {
+    if (step.done) {
+      return (
+        <span
+          aria-hidden="true"
+          className="mt-1 inline-block h-2 w-2 flex-shrink-0 rounded-full bg-brand-accent"
+        />
+      );
+    }
+    return (
+      <span
+        aria-hidden="true"
+        className="mt-0.5 inline-block h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-brand-accent border-t-transparent"
+      />
+    );
+  }
+
+  if (isLast) {
+    return (
+      <span
+        aria-hidden="true"
+        className="mt-0.5 inline-block h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-brand-accent border-t-transparent"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="mt-1 inline-block h-2 w-2 flex-shrink-0 rounded-full bg-brand-accent"
+    />
   );
 }
 

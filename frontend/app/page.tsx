@@ -14,6 +14,7 @@ import type {
   ChatSummary,
   Profile,
   StatuteHit,
+  ThinkingStep,
 } from "@/lib/types";
 
 const EMPTY_PROFILE: Profile = {
@@ -28,6 +29,7 @@ export default function HomePage() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [activeChat, setActiveChat] = useState<ChatDetail | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modalStatuteId, setModalStatuteId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
@@ -90,7 +92,6 @@ export default function HomePage() {
     if (!activeChat) return;
     setError(null);
 
-    // Optimistic user-message echo so the UI reacts instantly.
     const optimistic: ChatMessage = {
       id: -Date.now(),
       role: "user",
@@ -101,10 +102,66 @@ export default function HomePage() {
     setActiveChat((prev) =>
       prev ? { ...prev, messages: [...prev.messages, optimistic] } : prev,
     );
+    setThinkingSteps([{ kind: "thinking", label: "Reading your question\u2026" }]);
     setIsSending(true);
 
     try {
-      const res = await api.sendChatMessage(activeChat.chat_id, { content });
+      const res = await api.streamChatMessage(
+        activeChat.chat_id,
+        { content },
+        (event) => {
+          // Translate raw SSE events into ThinkingStep entries the UI
+          // can stack. Each tool_start opens a new step; the matching
+          // tool_done patches the same step with a summary + done flag.
+          setThinkingSteps((prev) => {
+            switch (event.type) {
+              case "started":
+                return prev;
+              case "thinking":
+                if (event.step === 0) return prev; // already seeded
+                return [...prev, { kind: "thinking", label: event.label }];
+              case "thought":
+                return [...prev, { kind: "thought", text: event.text }];
+              case "tool_start":
+                return [
+                  ...prev,
+                  {
+                    kind: "tool",
+                    name: event.name,
+                    label: event.label,
+                    done: false,
+                  },
+                ];
+              case "tool_done": {
+                // Patch the most recent matching tool_start.
+                const idx = [...prev]
+                  .reverse()
+                  .findIndex(
+                    (s) =>
+                      s.kind === "tool" && s.name === event.name && !s.done,
+                  );
+                if (idx === -1) return prev;
+                const realIdx = prev.length - 1 - idx;
+                const next = prev.slice();
+                const target = next[realIdx];
+                if (target.kind !== "tool") return prev;
+                next[realIdx] = {
+                  ...target,
+                  summary: event.summary,
+                  done: true,
+                };
+                return next;
+              }
+              case "drafting":
+                return [...prev, { kind: "drafting" }];
+              case "final":
+              case "error":
+                return prev;
+            }
+          });
+        },
+      );
+
       setActiveChat((prev) => {
         if (!prev) return prev;
         const withoutOptimistic = prev.messages.filter(
@@ -122,7 +179,6 @@ export default function HomePage() {
       });
       await refreshChats();
     } catch (e) {
-      // Roll back the optimistic message.
       setActiveChat((prev) =>
         prev
           ? {
@@ -134,6 +190,7 @@ export default function HomePage() {
       setError(e instanceof Error ? e.message : "Failed to send message");
     } finally {
       setIsSending(false);
+      setThinkingSteps([]);
     }
   }
 
@@ -174,6 +231,7 @@ export default function HomePage() {
           <ChatThread
             chat={activeChat}
             isSending={isSending}
+            thinkingSteps={thinkingSteps}
             onSend={handleSend}
             onSelectStatute={handleSelectStatute}
           />

@@ -36,7 +36,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,28 @@ from backend.agent.sources import web as web_source
 from backend.config import Settings, load_settings
 
 log = logging.getLogger(__name__)
+
+
+# `on_event(event_type, payload)` callback type. The agent loop fires this
+# at every interesting moment so callers (e.g. the SSE stream route) can
+# show a live trace of what the model is doing — not just the final answer.
+#
+# Event types and payload shape:
+#   - "started"     : {} — very first event, before anything happens
+#   - "thinking"    : {"step": int, "label": str} — about to call Claude
+#   - "thought"     : {"text": str} — Claude emitted intermediate prose
+#                     between tool calls (the model's own reasoning)
+#   - "tool_start"  : {"name": str, "label": str, "input": dict}
+#   - "tool_done"   : {"name": str, "summary": str, "count": int | None}
+#   - "drafting"    : {} — Claude has stopped tool-using; final answer next
+#
+# Callbacks must be cheap and non-blocking — they fire on the agent's
+# worker thread. The route handler bridges them to an asyncio.Queue.
+OnEventFn = Callable[[str, dict[str, Any]], None]
+
+
+def _noop_on_event(_event_type: str, _payload: dict[str, Any]) -> None:
+    pass
 
 
 # ----------------------------------------------------------- public types
@@ -85,6 +107,7 @@ def run_agent_turn(
     settings: Settings | None = None,
     anthropic_client: AnthropicLike | None = None,
     web_client: web_source.WebSearchClient | None = None,
+    on_event: OnEventFn | None = None,
 ) -> AgentTurn:
     """Run one chat turn end-to-end.
 
@@ -92,15 +115,22 @@ def run_agent_turn(
     explicit `POST /chat/sessions` endpoint for the API, but inline creation
     keeps tests + scripted callers ergonomic).
 
+    `on_event` is fired at each interesting moment of the loop so callers
+    can render a live trace (see `OnEventFn` for the event vocabulary).
+    Default is a no-op so non-streaming callers don't change.
+
     Returns an `AgentTurn`. The caller is responsible for committing the
     `Session` so all writes — user message, assistant response, tool results,
     session timestamp, optional title — land atomically.
     """
 
     s = settings or load_settings()
+    emit: OnEventFn = on_event or _noop_on_event
     user_message = user_message.strip()
     if not user_message:
         raise ValueError("user_message must be non-empty")
+
+    emit("started", {})
 
     # --- 1. Resolve / create session
     if session_id is None:
@@ -132,6 +162,18 @@ def run_agent_turn(
     final_blocks: list[dict[str, Any]] | None = None
 
     for step in range(s.chat_max_steps):
+        emit(
+            "thinking",
+            {
+                "step": step,
+                "label": (
+                    "Reading your question\u2026"
+                    if step == 0
+                    else "Reasoning over the results\u2026"
+                ),
+            },
+        )
+
         response = client.messages.create(
             model=s.chat_model,
             system=SYSTEM_PROMPT,
@@ -152,9 +194,20 @@ def run_agent_turn(
 
         messages.append({"role": "assistant", "content": assistant_blocks})
 
+        # Surface any narrating text Claude emitted alongside the tool_use
+        # blocks ("Let me check the statute on red lights..."). These are
+        # the closest thing to a free-form thinking trace from the model
+        # without enabling extended thinking and paying for reasoning tokens.
+        for block in assistant_blocks:
+            if block.get("type") == "text":
+                text = (block.get("text") or "").strip()
+                if text:
+                    emit("thought", {"text": text})
+
         if stop_reason != "tool_use":
             final_text = _join_text_blocks(assistant_blocks)
             final_blocks = assistant_blocks
+            emit("drafting", {})
             break
 
         tool_use_blocks = [b for b in assistant_blocks if b.get("type") == "tool_use"]
@@ -162,6 +215,7 @@ def run_agent_turn(
             # stop_reason said tool_use but we got none — bail safely.
             final_text = _join_text_blocks(assistant_blocks)
             final_blocks = assistant_blocks
+            emit("drafting", {})
             break
 
         tool_result_blocks: list[dict[str, Any]] = []
@@ -169,6 +223,16 @@ def run_agent_turn(
             name = tu.get("name") or ""
             tool_input = tu.get("input") or {}
             tool_use_id = tu.get("id") or ""
+
+            emit(
+                "tool_start",
+                {
+                    "name": name,
+                    "label": _describe_tool_call(name, tool_input),
+                    "input": tool_input,
+                },
+            )
+
             try:
                 output = _dispatch_tool(
                     name=name,
@@ -195,6 +259,10 @@ def run_agent_turn(
                         "result_summary": f"error: {exc}",
                     }
                 )
+                emit(
+                    "tool_done",
+                    {"name": name, "summary": f"error: {exc}", "count": None},
+                )
                 continue
 
             tool_calls_log.append(
@@ -204,8 +272,29 @@ def run_agent_turn(
                     "result_summary": output.summary,
                 }
             )
-            statute_hits.extend(getattr(output, "statute_hits", []) or [])
-            web_hits.extend(getattr(output, "web_hits", []) or [])
+            new_statute_hits = list(getattr(output, "statute_hits", []) or [])
+            new_web_hits = list(getattr(output, "web_hits", []) or [])
+            statute_hits.extend(new_statute_hits)
+            web_hits.extend(new_web_hits)
+
+            count: int | None
+            if name == "search_statutes":
+                count = len(new_statute_hits)
+            elif name == "web_search":
+                count = len(new_web_hits)
+            elif name == "get_statute":
+                count = 1 if new_statute_hits else 0
+            else:
+                count = None
+
+            emit(
+                "tool_done",
+                {
+                    "name": name,
+                    "summary": _describe_tool_result(name, output, count),
+                    "count": count,
+                },
+            )
 
             tool_result_blocks.append(
                 {
@@ -353,6 +442,45 @@ def _clean_block(block: dict[str, Any]) -> dict[str, Any]:
 def _join_text_blocks(blocks: list[dict[str, Any]]) -> str:
     pieces = [b.get("text", "") for b in blocks if b.get("type") == "text"]
     return "\n".join(p for p in pieces if p).strip()
+
+
+def _describe_tool_call(name: str, tool_input: dict[str, Any]) -> str:
+    """Human-readable label for a tool invocation. Surfaced in the live
+    thinking trace the frontend renders during a chat turn."""
+
+    if name == "search_statutes":
+        query = (tool_input.get("query") or "").strip()
+        factor = (tool_input.get("factor") or "").strip()
+        if factor:
+            return f"Searching CA Vehicle Code for \u201c{query}\u201d (factor: {factor})"
+        return f"Searching CA Vehicle Code for \u201c{query}\u201d"
+    if name == "get_statute":
+        statute_id = (tool_input.get("statute_id") or "").strip() or "?"
+        return f"Looking up statute {statute_id}"
+    if name == "web_search":
+        query = (tool_input.get("query") or "").strip()
+        return f"Searching the web for \u201c{query}\u201d"
+    return f"Calling tool: {name}"
+
+
+def _describe_tool_result(name: str, output: Any, count: int | None) -> str:
+    """One-line summary of a tool result for the live trace.
+
+    Falls back to the tool's own `summary` string if we don't have a
+    specialized phrasing — that way new tools aren't silently mislabeled.
+    """
+
+    if name == "search_statutes":
+        if count == 0:
+            return "No matching statutes found"
+        return f"Found {count} statute{'s' if count != 1 else ''}"
+    if name == "get_statute":
+        return "Read full statute" if count else "Statute not found"
+    if name == "web_search":
+        if count == 0:
+            return "No whitelisted web sources found"
+        return f"Found {count} web result{'s' if count != 1 else ''}"
+    return getattr(output, "summary", "") or f"{name} done"
 
 
 def _autotitle(user_message: str) -> str:

@@ -143,6 +143,45 @@ export interface SendMessageResponse {
   chat_title: string;
 }
 
+// SSE events emitted by `POST /chats/{id}/messages/stream`. Each event
+// represents one observable moment of the agent's tool-use loop so the
+// frontend can render a live "thinking" trace instead of a static
+// "Searching…" placeholder.
+//
+// The terminal event is always `final` or `error`.
+export type ChatStreamEvent =
+  | { type: "started" }
+  | { type: "thinking"; step: number; label: string }
+  | { type: "thought"; text: string }
+  | {
+      type: "tool_start";
+      name: string;
+      label: string;
+      input: Record<string, unknown>;
+    }
+  | {
+      type: "tool_done";
+      name: string;
+      summary: string;
+      count: number | null;
+    }
+  | { type: "drafting" }
+  | {
+      type: "final";
+      user_message: ChatMessage;
+      assistant_message: ChatMessage;
+      chat_title: string;
+    }
+  | { type: "error"; detail: string; status?: number };
+
+// Frontend-side representation of one entry in the live thinking trace.
+// Built up from the SSE stream and rendered by `ThinkingTrace`.
+export type ThinkingStep =
+  | { kind: "thinking"; label: string }
+  | { kind: "thought"; text: string }
+  | { kind: "tool"; name: string; label: string; summary?: string; done: boolean }
+  | { kind: "drafting" };
+
 // Single-user demo profile. Persisted server-side; injected into the LLM
 // system prompt on every chat send so responses are tailored.
 export interface Profile {

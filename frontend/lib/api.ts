@@ -1,6 +1,7 @@
 import type {
   ChatDetail,
   ChatListResponse,
+  ChatStreamEvent,
   FactorsResponse,
   JurisdictionsResponse,
   MatchedVia,
@@ -176,6 +177,28 @@ function mockSearch(request: SearchRequest): SearchResponse {
         detailToHit(s, 1 / (60 + i), inferMatchedVia(s, request.query))
       ),
   };
+}
+
+// Pull the JSON payload out of a single SSE frame. SSE frames are
+// `data: <json>\n` (sometimes split across multiple `data:` lines per the
+// spec, but our backend always emits one). Comment lines starting with ":"
+// are heartbeats — skip them.
+function parseSseFrame(frame: string): ChatStreamEvent | null {
+  const lines = frame.split("\n");
+  const dataLines: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+  if (dataLines.length === 0) return null;
+  try {
+    return JSON.parse(dataLines.join("\n")) as ChatStreamEvent;
+  } catch {
+    return null;
+  }
 }
 
 function mockStatus(): StatusResponse {
@@ -367,6 +390,99 @@ class ApiClient {
     );
     if (!res.ok) throw new Error(`Send message failed: ${res.status}`);
     return res.json();
+  }
+
+  // Streaming variant of sendChatMessage. The promise resolves with the
+  // final SendMessageResponse; `onEvent` is fired for every intermediate
+  // SSE frame so the UI can render a live "thinking" trace.
+  //
+  // Falls back to the non-streaming endpoint in mock mode (no SSE there).
+  async streamChatMessage(
+    chatId: string,
+    request: SendMessageRequest,
+    onEvent: (event: ChatStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<SendMessageResponse> {
+    if (this.mockMode) {
+      // Synthesize a few pretend events so the UI can be developed offline.
+      await this.simulateLatency(120);
+      onEvent({ type: "started" });
+      await this.simulateLatency(180);
+      onEvent({
+        type: "tool_start",
+        name: "search_statutes",
+        label: `Searching CA Vehicle Code for \u201c${request.content.slice(0, 40)}\u201d`,
+        input: { query: request.content },
+      });
+      await this.simulateLatency(400);
+      onEvent({
+        type: "tool_done",
+        name: "search_statutes",
+        summary: "Found 3 statutes",
+        count: 3,
+      });
+      await this.simulateLatency(160);
+      onEvent({ type: "drafting" });
+      const final = await this.sendChatMessage(chatId, request);
+      onEvent({
+        type: "final",
+        user_message: final.user_message,
+        assistant_message: final.assistant_message,
+        chat_title: final.chat_title,
+      });
+      return final;
+    }
+
+    const res = await fetch(
+      `${this.baseUrl}/chats/${encodeURIComponent(chatId)}/messages/stream`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify(request),
+        signal,
+      },
+    );
+    if (!res.ok || !res.body) {
+      throw new Error(`Stream failed: ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let final: SendMessageResponse | null = null;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE frames are separated by a blank line.
+        let sepIdx: number;
+        while ((sepIdx = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sepIdx);
+          buffer = buffer.slice(sepIdx + 2);
+          const evt = parseSseFrame(frame);
+          if (!evt) continue;
+          onEvent(evt);
+          if (evt.type === "final") {
+            final = {
+              user_message: evt.user_message,
+              assistant_message: evt.assistant_message,
+              chat_title: evt.chat_title,
+            };
+          } else if (evt.type === "error") {
+            throw new Error(evt.detail || `Stream error (${evt.status ?? "?"})`);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+
+    if (!final) {
+      throw new Error("Stream ended without a final event");
+    }
+    return final;
   }
 
   // ----- Profile (single-user demo) ---------------------------------------
