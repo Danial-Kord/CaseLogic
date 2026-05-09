@@ -16,6 +16,7 @@ import type {
   ChatMessage,
   ChatSummary,
   Profile,
+  SendMessageOptions,
   StatuteHit,
   ThinkingStep,
 } from "@/lib/types";
@@ -91,7 +92,7 @@ export default function ResearchPage() {
     }
   }
 
-  async function handleSend(content: string) {
+  async function handleSend(content: string, options: SendMessageOptions) {
     if (!activeChat) return;
     setError(null);
 
@@ -111,7 +112,7 @@ export default function ResearchPage() {
     try {
       const res = await api.streamChatMessage(
         activeChat.chat_id,
-        { content },
+        { content, web_search_enabled: options.webSearchEnabled },
         (event) => {
           // Translate raw SSE events into ThinkingStep entries the UI
           // can stack. Each tool_start opens a new step; the matching

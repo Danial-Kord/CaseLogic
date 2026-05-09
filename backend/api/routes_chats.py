@@ -115,11 +115,17 @@ class SendMessageRequest(BaseModel):
     drives its own retrieval through Claude tool calls — we don't pre-filter
     here. Including them in the request keeps the API surface stable for
     when we wire factor-locked search back in.
+
+    `web_search_enabled` lets the user opt out of letting Claude reach the
+    public web for this turn. None means "use the server default" (currently
+    True). When False the web_search tool isn't exposed to Claude at all
+    this turn — the agent stays inside the local corpus.
     """
 
     content: str = Field(..., min_length=1, max_length=4000)
     factor: Optional[str] = None
     top_k: Optional[int] = Field(None, ge=1, le=50)
+    web_search_enabled: Optional[bool] = None
 
 
 class SendMessageResponse(BaseModel):
@@ -282,6 +288,11 @@ def send_message(
                 db=db,
                 session_id=chat_id,
                 user_message=payload.content,
+                enable_web=(
+                    True
+                    if payload.web_search_enabled is None
+                    else payload.web_search_enabled
+                ),
             )
         except SessionNotFound:
             raise HTTPException(status_code=404, detail="chat not found")
@@ -330,6 +341,11 @@ async def stream_message(
                         session_id=chat_id,
                         user_message=payload.content,
                         on_event=on_event,
+                        enable_web=(
+                            True
+                            if payload.web_search_enabled is None
+                            else payload.web_search_enabled
+                        ),
                     )
                 except SessionNotFound:
                     loop.call_soon_threadsafe(

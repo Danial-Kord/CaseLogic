@@ -108,6 +108,7 @@ def run_agent_turn(
     anthropic_client: AnthropicLike | None = None,
     web_client: web_source.WebSearchClient | None = None,
     on_event: OnEventFn | None = None,
+    enable_web: bool = True,
 ) -> AgentTurn:
     """Run one chat turn end-to-end.
 
@@ -118,6 +119,11 @@ def run_agent_turn(
     `on_event` is fired at each interesting moment of the loop so callers
     can render a live trace (see `OnEventFn` for the event vocabulary).
     Default is a no-op so non-streaming callers don't change.
+
+    `enable_web` controls whether the web_search tool schema is exposed to
+    Claude this turn. When False, Claude only sees the local statute tools
+    and physically cannot call web_search — nothing to suppress at the UI
+    layer afterwards. Default True preserves existing behavior.
 
     Returns an `AgentTurn`. The caller is responsible for committing the
     `Session` so all writes — user message, assistant response, tool results,
@@ -154,7 +160,7 @@ def run_agent_turn(
 
     # --- 4. Tool-use loop
     client = anthropic_client or _build_anthropic(s)
-    tools = _all_tool_schemas()
+    tools = _all_tool_schemas(enable_web=enable_web)
     tool_calls_log: list[dict[str, Any]] = []
     statute_hits: list[statute_source.StatuteToolHit] = []
     web_hits: list[web_source.WebToolHit] = []
@@ -365,8 +371,19 @@ def _build_anthropic(s: Settings) -> AnthropicLike:
     return anthropic.Anthropic(api_key=s.anthropic_api_key)
 
 
-def _all_tool_schemas() -> list[dict[str, Any]]:
-    return [*statute_source.TOOL_SCHEMAS, *web_source.TOOL_SCHEMAS]
+def _all_tool_schemas(*, enable_web: bool = True) -> list[dict[str, Any]]:
+    """Build the tool schema list for one turn.
+
+    Statute tools are always on. Web tools are gated by `enable_web` so the
+    user can opt out per-message — when off, Claude literally doesn't see
+    the web_search tool, which is more reliable than letting it call and
+    then filtering after the fact.
+    """
+
+    schemas: list[dict[str, Any]] = list(statute_source.TOOL_SCHEMAS)
+    if enable_web:
+        schemas.extend(web_source.TOOL_SCHEMAS)
+    return schemas
 
 
 _STATUTE_TOOL_NAMES = {t["name"] for t in statute_source.TOOL_SCHEMAS}

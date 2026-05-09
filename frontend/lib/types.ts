@@ -51,6 +51,24 @@ export interface StatuteDetail {
   retrieved_at: string | null;
 }
 
+// One outgoing edge from a statute. Returned by GET /statutes/{slug}/related.
+// The graph visualization (components/SourceViewer/RelatedGraph) consumes
+// these directly.
+export interface RelatedStatute {
+  statute_id: string;
+  universal_citation: string;
+  jurisdiction: string;
+  section_number: string;
+  subdivision: string | null;
+  snippet: string;
+  mention_count: number;
+}
+
+export interface RelatedStatutesResponse {
+  source_statute_id: string;
+  related: RelatedStatute[];
+}
+
 export interface FactorCount {
   factor: string;
   statute_count: number;
@@ -135,6 +153,19 @@ export interface SendMessageRequest {
   content: string;
   factor?: string;
   top_k?: number;
+  // When explicitly false, the backend won't expose the web_search tool
+  // to Claude this turn — the agent stays inside the local statute corpus.
+  // Omit (or undefined) to let the server use its default.
+  web_search_enabled?: boolean;
+}
+
+/**
+ * Options surfaced to the page-level `handleSend` from the chat composer.
+ * Keep this UI-flavored (camelCase, booleans) — `lib/api.ts` translates it
+ * into the on-the-wire `SendMessageRequest` shape.
+ */
+export interface SendMessageOptions {
+  webSearchEnabled: boolean;
 }
 
 export interface SendMessageResponse {
