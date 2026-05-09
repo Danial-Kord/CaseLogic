@@ -11,8 +11,8 @@ jest.mock("@/lib/api", () => ({
 
 const MOCK_FACTORS = {
   factors: [
-    { factor: "DUI/DWI", count: 3 },
-    { factor: "Reckless Driving", count: 2 },
+    { factor: "DUI/DWI", statute_count: 3 },
+    { factor: "Reckless Driving", statute_count: 2 },
   ],
 };
 
@@ -44,7 +44,7 @@ describe("SearchPanel", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("calls onSearch with query and top_k on submit", async () => {
+  it("calls onSearch with flat {query, factor, top_k} on submit", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);
@@ -52,7 +52,7 @@ describe("SearchPanel", () => {
     await user.click(screen.getByRole("button", { name: /search/i }));
     expect(onSearch).toHaveBeenCalledWith({
       query: "reckless driving",
-      filters: undefined,
+      factor: undefined,
       top_k: 10,
     });
   });
@@ -77,7 +77,7 @@ describe("SearchPanel", () => {
     );
   });
 
-  it("includes factor filter in the request when a factor is selected", async () => {
+  it("includes the selected factor at the top level (not nested in filters)", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);
@@ -89,18 +89,18 @@ describe("SearchPanel", () => {
     await user.click(screen.getByRole("button", { name: /search/i }));
     expect(onSearch).toHaveBeenCalledWith({
       query: "drunk",
-      filters: { factor: "DUI/DWI" },
+      factor: "DUI/DWI",
       top_k: 10,
     });
   });
 
-  it("omits filters when no factor is selected", async () => {
+  it("omits factor when none is selected", async () => {
     const user = userEvent.setup();
     const onSearch = jest.fn();
     render(<SearchPanel onSearch={onSearch} isLoading={false} />);
     await user.type(screen.getByRole("textbox"), "speeding{Enter}");
     expect(onSearch).toHaveBeenCalledWith(
-      expect.objectContaining({ filters: undefined })
+      expect.objectContaining({ factor: undefined })
     );
   });
 
@@ -120,7 +120,7 @@ describe("SearchPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("populates the factor dropdown from getFactors()", async () => {
+  it("populates the factor dropdown with statute_count labels from getFactors()", async () => {
     render(<SearchPanel onSearch={jest.fn()} isLoading={false} />);
     await waitFor(() => {
       expect(
