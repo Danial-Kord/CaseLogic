@@ -1,6 +1,12 @@
-# EvenUp x OpenClaw Hackathon
+# CaseLogic — Source-Grounded Legal Research Assistant
 
-A 24-hour build targeting a personal-injury legal research stack. Turn scattered public data (court records, government datasets, open web) into something a PI attorney would actually use — source-grounded, verifiable, no fabrication.
+**3rd place at the EvenUp × OpenClaw Hackathon** — built from scratch in under 24 hours.
+
+[![Demo Video](https://img.shields.io/badge/Demo-YouTube-red?logo=youtube)](https://youtu.be/7VE8Qm21KM8)
+
+> A source-grounded legal research assistant for personal-injury attorneys. Every claim is linked to a real public statute — no fabricated citations, no model-memory shortcuts.
+
+**[Watch the demo →](https://youtu.be/7VE8Qm21KM8)**
 
 Full spec: [openclaw_hackathon_baseline_architecture.md](openclaw_hackathon_baseline_architecture.md).
 
