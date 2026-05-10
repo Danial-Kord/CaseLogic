@@ -93,31 +93,6 @@ Use `/docs` for interactive OpenAPI. **Smallest working loop today:** `POST /ing
 
 The checklist in [docs/plan.md](docs/plan.md) remains the broader baseline; [docs/phase1_plan.md](docs/phase1_plan.md) narrows Phase 1 to **California-only** `query → result → UI` on statutes.
 
-## Architecture Q&A (guidance)
-
-Short answers for common “what does this module do?” questions. The authoritative detail stays in [openclaw_hackathon_baseline_architecture.md](openclaw_hackathon_baseline_architecture.md).
-
-### What is `backend/ingestion/adapters/*` — start with one (web or CanLII)?
-
-These are **source-specific connectors** that fetch public material (HTML/PDF/metadata) and hand it to `pipeline.py`. **Web** is implemented (`web_search` + fetch + persist to `documents`). **CanLII** / **pdf** are stubs today.
-
-For the **Harvester** track, add a dedicated statute adapter (see [docs/phase1_plan.md](docs/phase1_plan.md)); the generic web adapter is still useful for discovery and Phase-2 case law.
-
-### What is `backend/extraction/schemas.py`?
-
-**Typed shapes for structured extraction.** Currently holds **PI case comparator** models (`PICaseFields`, damages, liability). The Phase-1 statute workflow will add or prioritize a `Statute`-shaped schema when that layer is implemented.
-
-### What do extraction + retrieval + reasoning + verification modules do?
-
-**Extraction** — `schemas.py` defines fields; `extract.py` / `prompts.py` are placeholders until kickoff wiring.
-
-**Retrieval** — planned: Chroma + keyword (FTS) + hybrid fusion for statute search (see phase1 plan). Today the files are stubs.
-
-**Reasoning** / **Verification** — stubs; answers must stay source-grounded when you implement them (baseline Module 8–9).
-
-### Where does OpenClaw fit?
-
-**OpenClaw is the conversational layer on top of the backend**, calling FastAPI tools rather than inventing legal facts. Tool declarations live in `openclaw/`; they are not wired for statute search yet.
 
 ## Trust & safety
 
