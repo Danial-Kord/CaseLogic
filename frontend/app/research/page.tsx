@@ -300,6 +300,7 @@ export default function ResearchPage() {
               thinkingSteps={thinkingSteps}
               onSend={handleSend}
               onSelectStatute={handleSelectStatute}
+              onOpenStatute={(slug) => setModalStatuteId(slug)}
             />
           </div>
         </main>

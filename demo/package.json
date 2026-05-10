@@ -1,0 +1,19 @@
+{
+  "name": "caselogic-demo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Playwright + ffmpeg-static demo recorder for the CaseLogic frontend.",
+  "scripts": {
+    "record": "tsx src/record.ts",
+    "edit": "tsx src/edit.ts",
+    "demo": "tsx src/record.ts && tsx src/edit.ts",
+    "browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ffmpeg-static": "^5.2.0",
+    "playwright": "^1.49.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

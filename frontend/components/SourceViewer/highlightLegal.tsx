@@ -8,9 +8,19 @@
 // Both call into the same regex so the visual treatment of "willful or
 // wanton disregard" or "Cal. Veh. Code § 23103(a)" is identical wherever
 // statute text appears.
+//
+// Cross-reference chips are clickable when the caller passes
+// `onCiteClick`. We resolve the matched text to a statute_id slug via
+// parseCrossReferenceToSlug; on success the chip becomes a <button> that
+// fires the callback. Unresolvable refs (or self-references) keep the
+// non-clickable <span> so we never render a dead button.
 
 import type { ReactNode } from "react";
 import { strings } from "@/lib/i18n/en";
+import {
+  type Jurisdiction,
+  parseCrossReferenceToSlug,
+} from "@/lib/citation";
 
 // Legal terms-of-art a PI lawyer scans for. Order matters: longer phrases
 // must come first so regex alternation prefers them over their shorter
@@ -72,13 +82,37 @@ function getHighlightRegex(): RegExp {
   return _highlightRe;
 }
 
+export interface HighlightLegalOptions {
+  /**
+   * If provided, every parseable cross-reference is rendered as a
+   * <button> that fires the callback with the resolved statute_id slug.
+   * Refs we can't parse fall back to the non-clickable visual chip.
+   */
+  onCiteClick?: (statuteId: string) => void;
+  /**
+   * Used to resolve bare "§ N" references — e.g. inside a CA-jurisdiction
+   * row, "§ 22350" becomes "ca-veh-22350". Pass the surrounding row's
+   * jurisdiction (or the current statute's, when rendering full text).
+   */
+  defaultJurisdiction?: Jurisdiction | null;
+  /**
+   * Slug of the statute we're currently rendering. Cross-refs that
+   * resolve to the same slug are kept non-clickable to avoid pointless
+   * "open me again" buttons inside the very statute the user is reading.
+   */
+  currentStatuteId?: string | null;
+}
+
 /**
  * Walk `text` and return an array of ReactNodes where every legal term
  * is wrapped in <mark> and every statute cross-reference is wrapped in a
- * styled <span>. Plain text in between is returned as-is. Suitable for
- * placing inside any block container (`<p>`, `<span>`, `<td>`).
+ * styled <span> (or <button>, when `opts.onCiteClick` is supplied).
+ * Plain text in between is returned as-is.
  */
-export function highlightLegal(text: string): ReactNode[] {
+export function highlightLegal(
+  text: string,
+  opts: HighlightLegalOptions = {},
+): ReactNode[] {
   if (!text) return [];
 
   const regex = getHighlightRegex();
@@ -109,15 +143,7 @@ export function highlightLegal(text: string): ReactNode[] {
         </mark>,
       );
     } else if (groups.ref) {
-      out.push(
-        <span
-          key={key}
-          title={strings.sourceViewer.crossRefTooltip}
-          className="mx-0.5 inline-block rounded-md border border-brand-accent/30 bg-brand-accent/10 px-1.5 py-0 font-mono text-[12.5px] font-medium text-brand-accent"
-        >
-          {match[0]}
-        </span>,
-      );
+      out.push(renderCiteChip(match[0], key, opts));
     }
     lastIdx = match.index + match[0].length;
     // Defensive: avoid infinite loop on zero-width matches.
@@ -129,4 +155,70 @@ export function highlightLegal(text: string): ReactNode[] {
   }
 
   return out;
+}
+
+// --------------------------------------------------------------- chip render
+
+const CHIP_CLASSES =
+  "mx-0.5 inline-block rounded-md border border-brand-accent/30 bg-brand-accent/10 px-1.5 py-0 font-mono text-[12.5px] font-medium text-brand-accent";
+const CHIP_CLICKABLE_CLASSES =
+  // Clickable variant — same look, plus a hover lift and the action cursor.
+  // Keep the chip itself inline so wrap/line-height match the surrounding
+  // prose; we just upgrade the element to a <button>.
+  "cursor-pointer transition-colors hover:bg-brand-accent/20 hover:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40";
+
+function renderCiteChip(
+  raw: string,
+  key: string,
+  opts: HighlightLegalOptions,
+): ReactNode {
+  const slug = opts.onCiteClick
+    ? parseCrossReferenceToSlug(raw, opts.defaultJurisdiction ?? null)
+    : null;
+  const isSelfRef =
+    !!slug && !!opts.currentStatuteId && slug === opts.currentStatuteId;
+  const clickable = !!slug && !!opts.onCiteClick && !isSelfRef;
+
+  if (!clickable) {
+    return (
+      <span
+        key={key}
+        title={strings.sourceViewer.crossRefTooltip}
+        className={CHIP_CLASSES}
+      >
+        {raw}
+      </span>
+    );
+  }
+
+  // We already verified slug is non-null above.
+  const targetSlug = slug as string;
+  const handler = opts.onCiteClick as (statuteId: string) => void;
+
+  return (
+    <button
+      key={key}
+      type="button"
+      title={strings.sourceViewer.crossRefClickable}
+      aria-label={strings.sourceViewer.crossRefAria(raw)}
+      onClick={(e) => {
+        // Crucial: the chip often lives inside a clickable row (results
+        // table, chat sidebar). Stop propagation so we open the cited
+        // statute instead of selecting the row.
+        e.stopPropagation();
+        e.preventDefault();
+        handler(targetSlug);
+      }}
+      onKeyDown={(e) => {
+        // Pressing Enter on a focused <button> inside a row would also
+        // bubble up and trigger the row's keyboard handler. Same fix.
+        if (e.key === "Enter" || e.key === " ") {
+          e.stopPropagation();
+        }
+      }}
+      className={`${CHIP_CLASSES} ${CHIP_CLICKABLE_CLASSES}`}
+    >
+      {raw}
+    </button>
+  );
 }

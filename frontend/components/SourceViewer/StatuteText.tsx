@@ -21,23 +21,60 @@ const HISTORY_FOOTER_RE = /(\[[^\[\]]*\b(?:18|19|20)\d{2}\b[^\[\]]*\][\s\S]*)$/;
 interface StatuteTextProps {
   text: string;
   className?: string;
+  /**
+   * If provided, cross-references inside the rendered paragraphs become
+   * clickable — the callback receives the resolved statute_id slug.
+   * Self-references (slug === currentStatuteId) stay non-clickable.
+   */
+  onCiteClick?: (statuteId: string) => void;
+  /**
+   * Used to resolve bare "§ N" references when `onCiteClick` is set.
+   * Pass the surrounding statute's jurisdiction.
+   */
+  jurisdiction?: string | null;
+  /** Slug of the statute being rendered — drops self-reference chips. */
+  currentStatuteId?: string | null;
 }
 
-export default function StatuteText({ text, className = "" }: StatuteTextProps) {
+export default function StatuteText({
+  text,
+  className = "",
+  onCiteClick,
+  jurisdiction,
+  currentStatuteId,
+}: StatuteTextProps) {
   const { body, history } = stripHistoryFooter(normalize(text));
   const paragraphs = splitParagraphs(body);
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {paragraphs.map((para, i) => (
-        <Paragraph key={i} text={para} />
+        <Paragraph
+          key={i}
+          text={para}
+          onCiteClick={onCiteClick}
+          jurisdiction={jurisdiction}
+          currentStatuteId={currentStatuteId}
+        />
       ))}
       {history && <HistoryFooter text={history} />}
     </div>
   );
 }
 
-function Paragraph({ text }: { text: string }) {
+interface ParagraphProps {
+  text: string;
+  onCiteClick?: (statuteId: string) => void;
+  jurisdiction?: string | null;
+  currentStatuteId?: string | null;
+}
+
+function Paragraph({
+  text,
+  onCiteClick,
+  jurisdiction,
+  currentStatuteId,
+}: ParagraphProps) {
   const sub = text.match(SUBSECTION_PREFIX_RE);
   const label = sub?.[1];
   const body = sub ? text.slice(sub[0].length) : text;
@@ -54,7 +91,13 @@ function Paragraph({ text }: { text: string }) {
       ) : (
         <span aria-hidden="true" className="min-w-[1.75rem] flex-shrink-0" />
       )}
-      <span className="flex-1">{highlightLegal(body)}</span>
+      <span className="flex-1">
+        {highlightLegal(body, {
+          onCiteClick,
+          defaultJurisdiction: jurisdiction ?? null,
+          currentStatuteId: currentStatuteId ?? null,
+        })}
+      </span>
     </p>
   );
 }

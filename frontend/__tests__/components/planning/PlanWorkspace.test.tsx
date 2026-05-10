@@ -3,7 +3,7 @@ import PlanWorkspace, {
   buildInitialViews,
   type SectionView,
 } from "@/components/planning/PlanWorkspace";
-import { applyPlanEvent } from "@/app/plans/page";
+import { applyPlanEvent } from "@/components/planning/applyPlanEvent";
 import type {
   PlanDetail,
   PlanSectionKind,

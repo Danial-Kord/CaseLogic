@@ -99,6 +99,11 @@ export const strings = {
     copyCitation: "Copy citation",
     copied: "Copied!",
     crossRefTooltip: "Cross-reference to another statute",
+    // Surfaced when the cross-ref is clickable (we resolved it to a known
+    // slug). We swap the static tooltip out for an action-flavored one so
+    // the cursor change is reinforced verbally for screen-reader users.
+    crossRefClickable: "Open this statute",
+    crossRefAria: (citation: string) => `Open ${citation}`,
   },
 
   verification: {

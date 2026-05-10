@@ -1,9 +1,8 @@
 import Image from "next/image";
 
 /**
- * Official EvenUp logo (horizontal wordmark + icon).
- * Asset: https://mma.prnewswire.com/media/2525332/EvenUp_Logo.jpg
- * Copied to `/public/evenup-logo.jpg` for reliable loading.
+ * EvenUp brand mark for the app header.
+ * Local asset: `/public/portfolio-evenup.png`.
  */
 export default function EvenUpLogo({ className = "" }: { className?: string }) {
   return (
@@ -11,7 +10,7 @@ export default function EvenUpLogo({ className = "" }: { className?: string }) {
       className={`relative h-14 w-full max-w-[22rem] shrink-0 ${className}`}
     >
       <Image
-        src="/evenup-logo.jpg"
+        src="/portfolio-evenup.png"
         alt="EvenUp"
         fill
         className="object-contain object-left"

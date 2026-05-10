@@ -13,9 +13,19 @@ import StatuteText from "./StatuteText";
 
 interface SourceViewerProps {
   statuteId: string | null;
+  /**
+   * When provided, statute cross-references inside the displayed text
+   * become clickable: the parent (typically `StatuteModal`) can swap
+   * `statuteId` to jump to the cited statute. Self-references are
+   * ignored — see `highlightLegal`.
+   */
+  onCiteClick?: (statuteId: string) => void;
 }
 
-export default function SourceViewer({ statuteId }: SourceViewerProps) {
+export default function SourceViewer({
+  statuteId,
+  onCiteClick,
+}: SourceViewerProps) {
   const [statute, setStatute] = useState<StatuteDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +125,12 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-brand-muted">
           {strings.sourceViewer.statutoryText}
         </p>
-        <StatuteText text={statute.statute_text} />
+        <StatuteText
+          text={statute.statute_text}
+          onCiteClick={onCiteClick}
+          jurisdiction={statute.jurisdiction}
+          currentStatuteId={statute.statute_id}
+        />
       </section>
 
       {showFullContext && (
@@ -127,7 +142,12 @@ export default function SourceViewer({ statuteId }: SourceViewerProps) {
             {strings.sourceViewer.showFullContext}
           </summary>
           <div className="mt-3">
-            <StatuteText text={statute.complete_statute ?? ""} />
+            <StatuteText
+              text={statute.complete_statute ?? ""}
+              onCiteClick={onCiteClick}
+              jurisdiction={statute.jurisdiction}
+              currentStatuteId={statute.statute_id}
+            />
           </div>
         </details>
       )}

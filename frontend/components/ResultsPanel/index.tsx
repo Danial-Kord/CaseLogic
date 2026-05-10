@@ -78,6 +78,13 @@ interface ResultsPanelProps {
   query: string;
   onSelect: (result: StatuteHit) => void;
   selectedStatuteId?: string;
+  /**
+   * Optional. When provided, statute cross-references inside each row's
+   * snippet (e.g. "RCW 46.61.5249", "§ 22350(a)") become clickable
+   * buttons that jump straight to that statute. Bare "§ N" references
+   * resolve against the row's jurisdiction.
+   */
+  onOpenStatute?: (statuteId: string) => void;
 }
 
 export default function ResultsPanel({
@@ -86,6 +93,7 @@ export default function ResultsPanel({
   query,
   onSelect,
   selectedStatuteId,
+  onOpenStatute,
 }: ResultsPanelProps) {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -279,7 +287,11 @@ export default function ResultsPanel({
                   </td>
                   <td className="px-2 py-2 text-sm text-brand-secondary">
                     <span className="line-clamp-2 leading-relaxed">
-                      {highlightLegal(truncated)}
+                      {highlightLegal(truncated, {
+                        onCiteClick: onOpenStatute,
+                        defaultJurisdiction: r.jurisdiction,
+                        currentStatuteId: r.statute_id,
+                      })}
                     </span>
                   </td>
                 </tr>

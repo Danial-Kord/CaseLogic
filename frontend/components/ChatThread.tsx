@@ -21,6 +21,13 @@ interface ChatThreadProps {
   thinkingSteps: ThinkingStep[];
   onSend: (content: string, options: SendMessageOptions) => void;
   onSelectStatute: (hit: StatuteHit) => void;
+  /**
+   * Open a statute by raw slug. Wired so cross-reference chips inside
+   * the snippet column ("RCW 46.61.5249", "§ 22350(a)") can jump to the
+   * cited statute. Distinct from `onSelectStatute` which expects a
+   * full StatuteHit (the row click), since we only have a slug here.
+   */
+  onOpenStatute?: (statuteId: string) => void;
 }
 
 export default function ChatThread({
@@ -29,6 +36,7 @@ export default function ChatThread({
   thinkingSteps,
   onSend,
   onSelectStatute,
+  onOpenStatute,
 }: ChatThreadProps) {
   const [input, setInput] = useState("");
   // Default ON: web search is the user's safety net when the local corpus
@@ -113,6 +121,7 @@ export default function ChatThread({
                   : ""
               }
               onSelectStatute={onSelectStatute}
+              onOpenStatute={onOpenStatute}
             />
           ))}
           {isSending && <ThinkingTrace steps={thinkingSteps} />}
@@ -163,12 +172,14 @@ interface MessageBubbleProps {
   message: ChatMessage;
   userQuery: string;
   onSelectStatute: (hit: StatuteHit) => void;
+  onOpenStatute?: (statuteId: string) => void;
 }
 
 function MessageBubble({
   message,
   userQuery,
   onSelectStatute,
+  onOpenStatute,
 }: MessageBubbleProps) {
   if (message.role === "user") {
     return (
@@ -197,6 +208,7 @@ function MessageBubble({
           query={userQuery}
           selectedStatuteId={undefined}
           onSelect={onSelectStatute}
+          onOpenStatute={onOpenStatute}
         />
       )}
     </div>

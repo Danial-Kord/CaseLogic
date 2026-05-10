@@ -13,10 +13,10 @@ import PlanWorkspace, {
   type SectionView,
   buildInitialViews,
 } from "@/components/planning/PlanWorkspace";
+import { applyPlanEvent } from "@/components/planning/applyPlanEvent";
 import type {
   PlanDetail,
   PlanSectionKind,
-  PlanStreamEvent,
   PlanSummary,
 } from "@/lib/types";
 
@@ -193,57 +193,3 @@ export default function PlansPage() {
   );
 }
 
-/**
- * Translate one SSE event from the planning stream into a section-views
- * mutation. Exported for unit tests.
- */
-export function applyPlanEvent(
-  event: PlanStreamEvent,
-  setSectionViews: React.Dispatch<
-    React.SetStateAction<Record<PlanSectionKind, SectionView>>
-  >,
-) {
-  switch (event.type) {
-    case "started":
-    case "retrieving":
-    case "retrieved":
-      return;
-    case "agent_start":
-      setSectionViews((prev) => ({
-        ...prev,
-        [event.kind]: {
-          status: "running",
-          contentMd: null,
-          citedStatuteIds: [],
-        },
-      }));
-      return;
-    case "agent_done":
-      setSectionViews((prev) => ({
-        ...prev,
-        [event.kind]: {
-          status: "done",
-          contentMd: event.content_md,
-          citedStatuteIds: event.cited_statute_ids,
-        },
-      }));
-      return;
-    case "error":
-      setSectionViews((prev) => {
-        // Mark any in-flight section as errored so the user sees where
-        // the run stopped, while leaving completed sections untouched.
-        const next = { ...prev };
-        (Object.keys(next) as PlanSectionKind[]).forEach((kind) => {
-          if (next[kind].status === "running") {
-            next[kind] = { ...next[kind], status: "error" };
-          }
-        });
-        return next;
-      });
-      return;
-    case "final":
-      // Page-level handler also re-fetches the full PlanDetail; nothing
-      // to do per-section here.
-      return;
-  }
-}

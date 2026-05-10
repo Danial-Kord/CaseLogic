@@ -33,6 +33,13 @@ data/exports/
 .env.*
 !.env.example
 
+# Demo recorder artifacts
+demo/clips/
+demo/output/
+demo/node_modules/
+!demo/clips/.gitkeep
+!demo/output/.gitkeep
+
 # Editors
 .vscode/
 .idea/

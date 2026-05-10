@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import SourceViewer from "./SourceViewer";
 
 interface StatuteModalProps {
@@ -13,8 +13,21 @@ interface StatuteModalProps {
  *
  * Handles only the modal chrome — Esc-to-close, body scroll lock, click-out
  * dismissal, close button. The viewer itself owns all statute rendering.
+ *
+ * In-modal navigation: when the user clicks a cross-reference chip inside
+ * the displayed statute (e.g. "RCW 46.61.5249" inside the statutory text),
+ * we keep the modal open and swap `currentId` to the cited slug. Closing
+ * the modal resets state so the next open starts fresh.
  */
 export default function StatuteModal({ statuteId, onClose }: StatuteModalProps) {
+  const [currentId, setCurrentId] = useState<string | null>(statuteId);
+
+  // Mirror the prop into local state so the parent's "open this slug" call
+  // wins over any internal navigation. Resets to null on close.
+  useEffect(() => {
+    setCurrentId(statuteId);
+  }, [statuteId]);
+
   useEffect(() => {
     if (!statuteId) return;
     function onKey(e: KeyboardEvent) {
@@ -62,7 +75,10 @@ export default function StatuteModal({ statuteId, onClose }: StatuteModalProps) 
             />
           </svg>
         </button>
-        <SourceViewer statuteId={statuteId} />
+        <SourceViewer
+          statuteId={currentId}
+          onCiteClick={(slug) => setCurrentId(slug)}
+        />
       </div>
     </div>
   );
