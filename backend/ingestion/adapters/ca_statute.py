@@ -31,7 +31,7 @@ _LEGINFO_TEMPLATE = (
     "?lawCode={code}&sectionNum={section}"
 )
 _USER_AGENT = (
-    "CaStatuteIngester/1.0 (EvenUp-OpenClaw hackathon prototype; "
+    "CaStatuteIngester/1.0 (legal-research prototype; "
     "+https://example.invalid/legal-research)"
 )
 _DEFAULT_DELAY = 1.1   # slightly over 1 req/sec to be safe

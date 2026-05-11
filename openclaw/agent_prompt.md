@@ -1,1 +1,1 @@
-# OpenClaw Agent Prompt
+# Agent Prompt

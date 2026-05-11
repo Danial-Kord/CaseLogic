@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 _URL_TEMPLATE = "https://www.nysenate.gov/legislation/laws/VAT/{section}"
 _USER_AGENT = (
-    "NyStatuteIngester/1.0 (EvenUp-OpenClaw hackathon prototype; "
+    "NyStatuteIngester/1.0 (legal-research prototype; "
     "+https://example.invalid/legal-research)"
 )
 _DEFAULT_DELAY = 1.5  # nysenate.gov is slower; be polite

@@ -393,7 +393,7 @@ Be transparent that the current checkout still needs a fresh ingest to become a 
     Add-AnimSet $slide $header
 
     $gap1 = Add-Card -slide $slide -left 70 -top 166 -width 250 -height 230 -fillR 17 -fillG 24 -fillB 39 -lineR 51 -lineG 65 -lineB 85 -lineWeight 1.2
-    $gap1Title = Add-TextBox -slide $slide -left 94 -top 200 -width 202 -height 42 -text "OpenClaw manifests are still placeholders" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
+    $gap1Title = Add-TextBox -slide $slide -left 94 -top 200 -width 202 -height 42 -text "Agent manifests are still placeholders" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true -paragraphAlign 2
     $gap1Body = Add-TextBox -slide $slide -left 94 -top 268 -width 202 -height 56 -text "The working agent logic lives in backend/agent today." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184 -paragraphAlign 2
 
     $gap2 = Add-Card -slide $slide -left 354 -top 166 -width 250 -height 230 -fillR 17 -fillG 24 -fillB 39 -lineR 51 -lineG 65 -lineB 85 -lineWeight 1.2
@@ -411,7 +411,7 @@ Be transparent that the current checkout still needs a fresh ingest to become a 
     Add-Note $slide @"
 4:40-5:30
 Call these out yourself so nobody has to discover them by surprise.
-The repo is ahead on backend grounding features, but still behind on OpenClaw packaging, evaluation reporting, and fully surfacing verification in the main chat UI.
+The repo is ahead on backend grounding features, but still behind on agent packaging, evaluation reporting, and fully surfacing verification in the main chat UI.
 That honesty actually strengthens the presentation.
 "@
 
@@ -438,7 +438,7 @@ That honesty actually strengthens the presentation.
 
     $step3 = Add-Card -slide $slide -left 628 -top 222 -width 242 -height 162 -fillR 17 -fillG 24 -fillB 39 -lineR 245 -lineG 158 -lineB 11 -lineWeight 1.5
     $step3Num = Add-TextBox -slide $slide -left 648 -top 244 -width 40 -height 24 -text "03" -fontName "Aptos Display" -fontSize 20 -r 245 -g 158 -b 11 -bold $true
-    $step3Title = Add-TextBox -slide $slide -left 648 -top 278 -width 180 -height 24 -text "Package for OpenClaw" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
+    $step3Title = Add-TextBox -slide $slide -left 648 -top 278 -width 180 -height 24 -text "Package agent layer" -fontName "Aptos Display" -fontSize 18 -r 248 -g 250 -b 252 -bold $true
     $step3Body = Add-TextBox -slide $slide -left 648 -top 314 -width 194 -height 40 -text "Point the manifest files at the already-working agent loop." -fontName "Aptos" -fontSize 14 -r 148 -g 163 -b 184
 
     $closeLine = Add-TextBox -slide $slide -left 150 -top 432 -width 660 -height 24 `
@@ -453,7 +453,7 @@ That honesty actually strengthens the presentation.
     Add-Note $slide @"
 5:30-7:00
 End with momentum.
-The architecture no longer needs a conceptual defense. The next steps are concrete: populate the corpus, surface the verifier in the UI, and package the current agent loop cleanly for OpenClaw.
+The architecture no longer needs a conceptual defense. The next steps are concrete: populate the corpus, surface the verifier in the UI, and package the current agent loop cleanly for the demo.
 If you want a final sentence, use: CaseLogic now shows its work, and the verifier makes unsupported claims visible.
 "@
 

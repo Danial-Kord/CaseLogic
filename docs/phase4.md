@@ -1,4 +1,4 @@
-# Phase 4 — OpenClaw + demo polish + freeze
+# Phase 4 — Agent wiring + demo polish + freeze
 
 > **Roadmap**
 >
@@ -7,9 +7,9 @@
 > | 1 | Statute search loop (CA VEH, query → result → UI) | **Shipped on `main`** | [phase1_plan.md](phase1_plan.md) |
 > | 2 | Complete corpus + measurable retrieval | Pending | [phase2.md](phase2.md) |
 > | 3 | Source-grounded reasoning + verification | Pending | [phase3.md](phase3.md) |
-> | 4 | OpenClaw wiring + demo polish + freeze | **This doc** | [phase4.md](phase4.md) |
+> | 4 | Agent wiring + demo polish + freeze | **This doc** | [phase4.md](phase4.md) |
 >
-> Source of truth for module shapes: [../openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md).
+> Source of truth for module shapes: baseline architecture doc (kept locally, not tracked).
 
 ---
 
@@ -17,7 +17,7 @@
 
 A judge can:
 
-1. Open the OpenClaw chat layer and type a fact pattern.
+1. Open the agent chat layer and type a fact pattern.
 2. Watch the agent call `search_statutes` → `get_statute` → `answer_with_sources`
    → `verify_claims` → `show_sources`, all wrapping our FastAPI routes.
 3. See an answer with `[cite: ca-veh-21453-a, ¶1]` markers, click one, land
@@ -59,9 +59,9 @@ This is a smaller phase than 2 or 3 — most owners are wrapping up Phase-3 work
 in parallel with these tasks. Treat the bullet list below as a checklist, not
 strict ownership.
 
-### Person 4 — OpenClaw wiring
+### Person 4 — Agent wiring
 
-**Goal:** the OpenClaw agent can do everything the REST API can do.
+**Goal:** the agent can do everything the REST API can do.
 
 - [ ] **Tool declarations** in [`openclaw/tools.json`](../openclaw/tools.json):
   six tools, each a thin wrapper over an existing FastAPI route.
@@ -82,7 +82,7 @@ strict ownership.
 - [ ] **Example config** in [`openclaw/config.example.json`](../openclaw/config.example.json):
   the model slug we're using, the FastAPI base URL, and the tool routing.
   Document required env vars in the README.
-- [ ] **Smoke a full agent loop** end-to-end: a single OpenClaw chat session
+- [ ] **Smoke a full agent loop** end-to-end: a single agent chat session
   asks "rear-end at red light, defendant texting; CA" and the agent calls all
   six tools in sequence, returning a verified answer. Capture the trace; it
   becomes part of the demo.
@@ -186,7 +186,7 @@ gap-fillers:
   queries while Person 5 captures).
 - Help Person 3 patch eval failures that root-cause to data (missing
   statute, mis-tagged factor).
-- Hand-test the OpenClaw chat session against weird queries (typos,
+- Hand-test the agent chat session against weird queries (typos,
   half-citations, queries in the wrong jurisdiction) and file issues — these
   are the queries judges will throw at us.
 
@@ -198,7 +198,7 @@ gap-fillers:
 Hour 0:  Person 4 lands tools.json + agent_prompt.md (1-2 hrs)
          Person 5 starts demo_script.md (parallel)
          Person 3 runs eval baseline (parallel)
-Hour 2:  Person 4's OpenClaw chat session runs end-to-end
+Hour 2:  Person 4's agent chat session runs end-to-end
          Person 5 starts capturing fallback screenshots
          Person 3 starts top-3 failure fixes
 Hour 4:  All artefacts in place; full team rehearses demo once
@@ -214,7 +214,7 @@ Hour 8:  CODE FREEZE. Only bug fixes. Pitch rehearsed solo by the speaker.
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| OpenClaw model can't load our tools.json schema | Low | Validate against the OpenClaw schema doc on first commit, not at hour 22. |
+| Agent model can't load our tools.json schema | Low | Validate against the schema doc on first commit, not at hour 22. |
 | The agent calls `answer_with_sources` directly without retrieving first | Medium | System prompt mandates the workflow; `answer_with_sources` itself runs retrieval, so even a lazy agent stays grounded. |
 | Frontend breaks at hour 23 | Medium | Fallback screenshots + `NEXT_PUBLIC_MOCK_MODE=1` (already exists). |
 | Demo network outage | Medium | Same as above. Don't rely on Anthropic API at the venue without a backup. |
@@ -237,7 +237,7 @@ for path in /statutes/search /answer /compare /verify; do
   # See phase3.md acceptance section for full curl bodies
 done
 
-# 3. OpenClaw trace
+# 3. Agent trace
 #    Run a single chat session asking the demo's question 1.
 #    Expect: search_statutes → answer_with_sources → verify_claims → show_sources
 

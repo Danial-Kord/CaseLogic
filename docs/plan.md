@@ -1,16 +1,16 @@
-# Hackathon Implementation Plan
+# Implementation Plan
 
-Implementation plan for the EvenUp x OpenClaw 24-hour hackathon. Synthesizes the hackathon brief ([Hackathon Prep.pdf](../Hackathon%20Prep.pdf)) with a modern RAG / evaluation stack (vector search, embeddings, LLM-based extraction, RAG benchmarks, factual grounding).
+Implementation plan. Synthesizes the project brief with a modern RAG / evaluation stack (vector search, embeddings, LLM-based extraction, RAG benchmarks, factual grounding).
 
 The single most important constraint: **the eval set is held out until kickoff.** No pre-optimizing on imagined queries, no hardcoded answers.
 
-Source of truth for module shapes and contracts: [openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md). This plan is the **timeline + technology** layer over that architecture.
+Source of truth for module shapes and contracts: the baseline architecture doc (kept locally, not tracked). This plan is the **timeline + technology** layer over that architecture.
 
 ---
 
 ## Recommended technology guide
 
-Picked for hackathon-fit: minimal setup, source-grounded by default, runs on a laptop, no exotic infra to debug at hour 18.
+Picked for project-fit: minimal setup, source-grounded by default, runs on a laptop, no exotic infra to debug at hour 18.
 
 | Layer | Pick | Why |
 |---|---|---|
@@ -18,14 +18,14 @@ Picked for hackathon-fit: minimal setup, source-grounded by default, runs on a l
 | Web framework | FastAPI + uvicorn | Already in `requirements.txt`. Async, easy docs. |
 | DB | SQLite via SQLAlchemy | Zero-config; one file in `data/`. Already specified. |
 | Vector DB | **Chroma** (local, persistent) | One `pip install`, no server. LanceDB is a fine alternative. **Avoid** Pinecone/Weaviate/Milvus — network deps and setup time. |
-| Embeddings | **`voyage-3` via Voyage AI**, or **`text-embedding-3-small`** (OpenAI), or **BGE-small-en-v1.5** local | Voyage is Anthropic-ecosystem-friendly; BGE is fully offline. Pick based on what's reachable from the hackathon network. |
+| Embeddings | **`voyage-3` via Voyage AI**, or **`text-embedding-3-small`** (OpenAI), or **BGE-small-en-v1.5** local | Voyage is Anthropic-ecosystem-friendly; BGE is fully offline. Pick based on what's reachable from the local network. |
 | LLM | **Claude (Anthropic API)** — provided | Use Claude 4.7 Sonnet for extraction (cheap, fast, structured output via tool use), Claude 4.7 Opus for reasoning/answer if budget allows. |
 | Retrieval | **Custom hybrid** = Chroma (vector) + SQLite FTS5 (keyword) + metadata filters | Avoid LangChain/LlamaIndex for the core pipeline — they obscure source tracking, which is the thing judges check. Use them only as reference implementations to crib from. |
 | Reranking | LLM-as-reranker over top-50 (Claude) or **`cohere-rerank-v3`** if reachable | Optional in v1. Big quality boost for top-k. |
 | Extraction | Claude tool use with Pydantic schemas | Structured output, schema-validated. |
 | Evaluation | **Custom mini-RAGAS** harness (faithfulness, context precision, answer correctness) + ad-hoc judge prompt | Don't pull in `ragas` as a dep — too heavy, write 60 lines of eval yourself. |
 | Frontend | Vite + React + TypeScript + Tailwind | Fast dev server, judges see results in <30s. |
-| Agent layer | OpenClaw with Claude tool-use loop calling FastAPI endpoints | The judges use OpenClaw — make tools, not chat. |
+| Agent layer | Claude tool-use loop calling FastAPI endpoints | Make tools, not chat — make tools, not chat. |
 
 **Explicitly skipped** (don't waste 24 hours on these):
 - **Fine-tuning / LoRA / PEFT** — no time, no need; prompt-engineering + few-shot wins.
@@ -126,7 +126,7 @@ Goal: every important claim has a green/amber/red badge. Judges spot-check this 
 - [ ] Frontend `VerificationPanel`: render badges (green/amber/red/gray) with hover-snippet
 - [ ] **Critical agent rule**: if a claim is unsupported, mark it unsupported. Do not silently drop. The judges WILL test this with a pathological query.
 
-OpenClaw agent wiring (do in parallel with the above):
+Agent wiring (do in parallel with the above):
 
 - [ ] [`openclaw/agent_prompt.md`](../openclaw/agent_prompt.md): paste the system prompt from baseline Section 10, customize for the chosen variant
 - [ ] [`openclaw/tools.json`](../openclaw/tools.json): declare `search_documents`, `get_document`, `extract_fields`, `compare_documents`, `verify_claims`, `show_sources`
@@ -182,7 +182,7 @@ Only attempt these if Phase 5 finishes early. They map to "ambition is rewarded"
 
 - **Cross-document reasoning**: "find me 5 cases similar to this fact pattern, ranked by award size" — comparator + ranking on extracted fields
 - **Damages calibrator**: extract every damages award in the corpus, build a non-pecuniary distribution by injury type — this is a public substitute for paywalled quantum digests (the brief's "going after what's locked behind paywalls" hint)
-- **Multi-hop agent**: OpenClaw makes 3+ tool calls per question, plans, and synthesizes — covers the "agentic workflow chops" hint
+- **Multi-hop agent**: the agent makes 3+ tool calls per question, plans, and synthesizes — covers the "agentic workflow chops" hint
 - **Adversarial robustness**: a "no answer found" path that gracefully says "no public source supports this" instead of confabulating
 - **Live ingestion**: judge gives a URL, system ingests it on the fly, answers from it 30 seconds later
 
@@ -206,7 +206,7 @@ Short list, all free:
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | Eval set is in a jurisdiction we didn't anticipate | Medium | Web adapter handles arbitrary URLs; CanLII covers all provinces — re-run adapter with new filter |
-| CanLII rate-limits us mid-hackathon | Medium | Polite scraping + on-disk cache; rotate UA; build tolerance to 429s |
+| CanLII rate-limits us | Medium | Polite scraping + on-disk cache; rotate UA; build tolerance to 429s |
 | Anthropic API hiccup | Low | Cache extraction outputs to disk; degrade reasoning to a smaller model if needed |
 | Frontend breaks at hour 22 | Medium | Fallback screenshots + a "demo mode" that loads pre-recorded responses |
 | Scope creep into a second variant | High | "We're doing one variant" is a hard line — bonus tiers stack on the chosen variant, not a new one |

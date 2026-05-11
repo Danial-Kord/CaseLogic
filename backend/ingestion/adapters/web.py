@@ -3,7 +3,7 @@ public documents, and `httpx` to fetch the matched URLs.
 
 Why Claude's web_search tool: zero extra setup beyond `ANTHROPIC_API_KEY`, results
 already include URL + title + page snippet, and Anthropic handles rate-limiting and
-robots compliance on their side. Pricing is $10/1k searches — fine at hackathon scale.
+robots compliance on their side. Pricing is $10/1k searches — fine at prototype scale.
 """
 
 from __future__ import annotations

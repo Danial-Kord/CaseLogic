@@ -36,7 +36,7 @@ def init_db() -> None:
 def _apply_lightweight_migrations() -> None:
     """Hand-rolled, idempotent migrations for SQLite dev databases.
 
-    We don't run Alembic in this repo (hackathon scope), so when we add a
+    We don't run Alembic in this repo (prototype scope), so when we add a
     column to an existing model we have to upgrade live databases here.
     Each migration must be safe to re-run — we swallow the OperationalError
     that SQLite raises when the column already exists.

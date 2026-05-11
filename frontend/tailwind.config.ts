@@ -31,8 +31,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Inter for body/UI, PT Serif for editorial headings — matches
-        // EvenUp's pairing.
+        // Inter for body/UI, PT Serif for editorial headings.
         sans: ["var(--font-sans)", ...defaultTheme.fontFamily.sans],
         serif: ["var(--font-serif)", ...defaultTheme.fontFamily.serif],
       },

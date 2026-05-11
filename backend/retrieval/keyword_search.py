@@ -5,7 +5,7 @@ into a virtual table `statute_fts` and rank with `bm25(statute_fts)`.
 
 Sync strategy: rebuild from scratch after each ingest. ~1,500 statutes,
 sub-second. Triggers + incremental updates aren't worth the complexity at
-hackathon scale.
+prototype scale.
 
 Query sanitization: FTS5 has its own query syntax (operators like `*`,
 `AND`, `NEAR`, `"phrase"`) that errors on stray punctuation in user input.

@@ -3,7 +3,7 @@
 import { useBookmarks } from "@/contexts/BookmarksContext";
 import { strings } from "@/lib/i18n/en";
 import type { ChatSummary, Profile } from "@/lib/types";
-import EvenUpLogo from "./branding/EvenUpLogo";
+import AppLogo from "./branding/AppLogo";
 import ProfileCard from "./ProfileCard";
 
 interface ChatSidebarProps {
@@ -33,7 +33,7 @@ export default function ChatSidebar({
   return (
     <aside className="flex h-full flex-col overflow-hidden rounded-lg border border-brand-border bg-brand-surface">
       <div className="shrink-0 border-b border-brand-border bg-gradient-to-b from-brand-bg to-brand-surface px-3 py-3 dark:from-brand-bg/60">
-        <EvenUpLogo />
+        <AppLogo />
         <p className="mt-2 text-[10px] font-medium uppercase tracking-wider text-brand-muted">
           {strings.sidebar.partnership}
         </p>

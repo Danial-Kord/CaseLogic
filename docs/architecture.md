@@ -2,7 +2,7 @@
 
 Delta notes describing **what is actually implemented in this repo right now**.
 
-The full baseline reference (module roles, generic shapes, design system, failure modes) stays in [openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md). The Phase-1 plan with timeboxes and per-person ownership lives in [docs/phase1_plan.md](phase1_plan.md). The user-facing API contract lives in [docs/api.md](api.md). This document is the bridge: a concrete map of what runs end-to-end today and what is still a stub.
+The baseline architecture doc (kept locally, not tracked) covers module roles, generic shapes, design system, and failure modes. The Phase-1 plan with timeboxes and per-person ownership lives in [docs/phase1_plan.md](phase1_plan.md). The user-facing API contract lives in [docs/api.md](api.md). This document is the bridge: a concrete map of what runs end-to-end today and what is still a stub.
 
 ---
 
@@ -179,7 +179,7 @@ These files exist as one-line docstrings and are **deliberately deferred**:
 - `backend/reasoning/*` — `answer`, `compare`, `summarize`. No prose generation in Phase 1.
 - `backend/verification/*` — `claims`, `verify`, `citations`. Verification badges become meaningful once Phase-2 introduces generated prose.
 - `backend/api/routes_search.py`, `routes_answer.py`, `routes_verify.py` — superseded by `routes_statutes.py` for Phase 1; reserved for Phase 2.
-- `openclaw/agent_prompt.md`, `openclaw/tools.json` — empty / heading-only. OpenClaw tooling is Phase 2.
+- `openclaw/agent_prompt.md`, `openclaw/tools.json` — empty / heading-only. Agent tooling is Phase 2.
 
 The stub policy from [CLAUDE.md](../CLAUDE.md) still applies: don't flesh these out without the user explicitly asking.
 
@@ -200,5 +200,5 @@ The stub policy from [CLAUDE.md](../CLAUDE.md) still applies: don't flesh these 
 
 - API contract → [docs/api.md](api.md)
 - Phase-1 plan, role assignments, acceptance bar → [docs/phase1_plan.md](phase1_plan.md)
-- Baseline architecture (the spec we're delta-noting against) → [openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md)
+- Baseline architecture (the spec we're delta-noting against) → kept locally, not tracked in git
 - Working-style rules → [CLAUDE.md](../CLAUDE.md)

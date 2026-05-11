@@ -33,7 +33,7 @@ export default function Hero() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-verified opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-verified" />
             </span>
-            EvenUp x OpenClaw Hackathon · 2026
+            CaseLogic · Source-Grounded Research
           </span>
 
           <h1

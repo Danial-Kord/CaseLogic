@@ -7,9 +7,9 @@
 > | 1 | Statute search loop (CA VEH, query → result → UI) | **Shipped on `main`** | [phase1_plan.md](phase1_plan.md) |
 > | 2 | Complete corpus + measurable retrieval | In progress | [phase2.md](phase2.md) |
 > | 3 | Source-grounded reasoning + verification | **This doc** | [phase3.md](phase3.md) |
-> | 4 | OpenClaw wiring + demo polish + freeze | Pending | [phase4.md](phase4.md) |
+> | 4 | Agent wiring + demo polish + freeze | Pending | [phase4.md](phase4.md) |
 >
-> Source of truth for module shapes: [../openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md).
+> Source of truth for module shapes: baseline architecture doc (kept locally, not tracked).
 
 ---
 
@@ -126,7 +126,7 @@ verification — exposed as well-typed REST endpoints.
 [backend/main.py](../backend/main.py),
 [backend/api/schemas.py](../backend/api/schemas.py).
 
-**Blocks:** Person 5 swaps fakes for real responses; Phase 4 OpenClaw tools
+**Blocks:** Person 5 swaps fakes for real responses; Phase 4 agent tools
 wrap these endpoints.
 **Blocked by:** Phase 2 retrieval quality is *useful but not required* —
 Person 4 can stub against the current 25-row corpus while Phase 2 finishes.

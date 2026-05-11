@@ -50,7 +50,7 @@ class Settings:
     # Hard cap on search tool invocations per /ingest/search request.
     web_search_max_uses: int = 5
     # Polite scraping defaults — applied to the raw URL fetcher.
-    fetch_user_agent: str = "CaseLogic/0.1 (hackathon prototype; +https://example.invalid)"
+    fetch_user_agent: str = "CaseLogic/0.1 (research prototype; +https://example.invalid)"
     fetch_timeout_seconds: float = 20.0
     # Chat agent settings -----------------------------------------------------
     # Same Sonnet model by default; overridable via CHAT_MODEL.

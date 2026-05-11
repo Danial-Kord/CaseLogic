@@ -4,8 +4,8 @@ Phase 1 of the post-kickoff build. Goal: ship a queryable, source-grounded **mul
 
 Source-of-truth specs:
 
-- Hackathon brief (eval criteria) — the user-facing prompt at kickoff
-- [openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md) — module shapes + API contracts
+- Project brief (eval criteria) — the user-facing prompt at kickoff
+- Baseline architecture doc (kept locally, not tracked) — module shapes + API contracts
 - [eval-ca-vehicle-code.csv](../eval-ca-vehicle-code.csv) — released set: 41 CA Vehicle Code statutes labeled across 17 contributing-factor categories
 
 [docs/plan.md](plan.md) was the pre-kickoff plan written for Variant A (PI Case Comparator on CanLII). The eval drop reframed the problem to **statute lookup**. This document supersedes it for Phase 1.
@@ -160,7 +160,7 @@ That's it. No `/answer`, no `/verify`, no `/compare`. Reasoning and verification
    - Extend `GET /status` to report indexed-statute count, jurisdictions covered (will be just CA for Phase 1), last-ingest timestamp, last eval score.
 2. Pydantic response models for all four endpoints in `backend/api/schemas.py` (new). Frontend reads these as the contract.
 3. Wire new routers in `backend/main.py` — currently only `routes_status` and `routes_ingest` are mounted.
-4. **No** OpenClaw / agent / answer / verify endpoints in Phase 1. Leave those modules as stubs.
+4. **No** agent / answer / verify endpoints in Phase 1. Leave those modules as stubs.
 5. Publish OpenAPI snapshot to `docs/api.md` so Person 5 and Person 6 have a stable reference.
 
 **Acceptance:** All four endpoints return 200 with the documented schema for at least one happy-path test. Person 5's frontend wires against them.
@@ -260,7 +260,7 @@ Everyone unblocks each other if **schema + factor enum + API contract are agreed
 |---|---|---|
 | `leginfo` HTML structure varies between divisions | Medium | Test parser against 5 sections from different divisions before bulk-ingesting; Person 1 owns this |
 | Factor tagger over-tags `Reckless Driving` (the broadest category) | Medium | Person 6 calibrates against thin-tail singletons in the released CSV before the bulk run; require a verbatim quote per tag |
-| Phase-1 scope creep into multi-state / OpenClaw / case law | High | Hard line: CA only, web UI only, no OpenClaw. Anyone who finishes early helps Person 6 with eval calibration or Person 5 with UI polish |
+| Phase-1 scope creep into multi-state / agent / case law | High | Hard line: CA only, web UI only, no agent layer. Anyone who finishes early helps Person 6 with eval calibration or Person 5 with UI polish |
 | `/statutes/{citation}` URL-encoding pain (citations contain `§`, spaces, parens) | Medium | Person 4 normalizes citations on input; expose `?q=` alternative; document the canonical form in `docs/api.md` |
 | Some CSV citations are subdivision-specific (e.g., `21451(a)` and `21451(b)`) | High | Schema must support `subdivision` as a separate field. Lookup `Cal. Veh. Code § 21451(a)` returns just the (a) row, not the parent. Person 1 + Person 3 align on this in the kickoff sync |
 | Held-out eval includes a state we didn't ingest | Medium-High | Phase-1 demo openly says CA-only; the existing `WebAdapter` is a fallback for live ingestion. **Multi-state is the #1 Phase-2 priority precisely because of this** |
@@ -274,10 +274,10 @@ Everyone unblocks each other if **schema + factor enum + API contract are agreed
 Held back so Phase 1 actually ships:
 
 - **Multi-state expansion** — TX, NY, FL vehicle codes. **#1 Phase-2 priority.**
-- **OpenClaw chat / agent layer** — `openclaw/agent_prompt.md` and `tools.json` stay empty. Phase-2 priority #2 (after multi-state).
+- **Agent layer** — `openclaw/agent_prompt.md` and `tools.json` stay empty. Phase-2 priority #2 (after multi-state).
 - **Case law interpreting statutes** — Organizer extension, Phase 2.
 - **NHTSA / CDC / OSHA dataset joins** — Phase 2 stretch.
-- **Per-claim verification badges** (`VerificationPanel`) — answers in Phase 1 are retrieved statutes, not generated prose, so verification is structurally simpler. Becomes meaningful in Phase 2 when OpenClaw generates prose answers.
+- **Per-claim verification badges** (`VerificationPanel`) — answers in Phase 1 are retrieved statutes, not generated prose, so verification is structurally simpler. Becomes meaningful in Phase 2 when the agent generates prose answers.
 - **`ComparisonTable`** — Organizer feature.
 - **The Negotiator agent** — Phase 3+.
 - **`reasoning/*` and `verification/*` modules** — leave as stubs.
@@ -285,7 +285,7 @@ Held back so Phase 1 actually ships:
 If the team finishes Phase 1 before the budget, the rank-ordered next moves are:
 
 1. **Add Texas Transportation Code** (Person 1's CA adapter is the template; Person 6 reruns the eval harness on TX-flavored queries).
-2. **Wire OpenClaw** — `tools.json` declaring `lookup_statute_by_citation`, `search_statutes_by_factor`, `search_statutes_by_text`; agent prompt forces tool use.
+2. **Wire agent layer** — `tools.json` declaring `lookup_statute_by_citation`, `search_statutes_by_factor`, `search_statutes_by_text`; agent prompt forces tool use.
 3. **Add NY Vehicle and Traffic Law.**
 
 ---

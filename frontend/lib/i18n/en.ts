@@ -11,7 +11,7 @@ export const strings = {
     tagline: "Source-grounded legal research",
     metaTitle: "CaseLogic — Source-grounded PI legal research",
     metaDescription:
-      "Hackathon prototype for personal-injury legal research. Source-grounded answers from public case law.",
+      "Source-grounded personal-injury legal research. Answers backed by public case law.",
     disclaimer:
       "Research prototype. Not legal advice. Results limited to indexed public sources.",
   },
@@ -46,7 +46,7 @@ export const strings = {
     chatsTitle: "Chats",
     bookmarksEmpty:
       "No saved statutes yet. Save from results or the statute viewer.",
-    partnership: "EvenUp × OpenClaw hackathon",
+    partnership: "CaseLogic",
   },
 
   bookmarks: {

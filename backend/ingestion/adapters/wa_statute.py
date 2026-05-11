@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 _URL_TEMPLATE = "https://app.leg.wa.gov/rcw/default.aspx?cite=46.61.{section_num}"
 _USER_AGENT = (
-    "WaStatuteIngester/1.0 (EvenUp-OpenClaw hackathon prototype; "
+    "WaStatuteIngester/1.0 (legal-research prototype; "
     "+https://example.invalid/legal-research)"
 )
 _DEFAULT_DELAY = 1.1

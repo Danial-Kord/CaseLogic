@@ -83,7 +83,7 @@ function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 text-center text-xs text-brand-muted sm:flex-row sm:text-left">
         <p>{strings.app.disclaimer}</p>
         <p className="font-mono">
-          © {new Date().getFullYear()} CaseLogic — hackathon prototype
+          © {new Date().getFullYear()} CaseLogic — research prototype
         </p>
       </div>
     </footer>

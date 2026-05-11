@@ -29,7 +29,7 @@ _BASE_URL = (
     "?App_mode=Display_Statute&URL=0300-0399/0316/Sections/0316.{frac}.html"
 )
 _USER_AGENT = (
-    "FlStatuteIngester/1.0 (EvenUp-OpenClaw hackathon prototype; "
+    "FlStatuteIngester/1.0 (legal-research prototype; "
     "+https://example.invalid/legal-research)"
 )
 _DEFAULT_DELAY = 1.1

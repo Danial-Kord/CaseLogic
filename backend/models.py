@@ -99,7 +99,7 @@ class StatuteFactor(Base):
 
     `factor` is byte-exact a value from `backend.extraction.factors.FACTORS`.
     `quote` is the verbatim snippet from the statute that justifies the tag —
-    required for traceability per the hackathon ground rules.
+    required for traceability per the project ground rules.
     """
 
     __tablename__ = "statute_factors"

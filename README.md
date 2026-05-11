@@ -1,6 +1,6 @@
 # CaseLogic — Source-Grounded Legal Research Assistant
 
-**3rd place at the EvenUp × OpenClaw Hackathon** — built from scratch in under 24 hours.
+Built from scratch in under 24 hours.
 
 [![Demo Video](https://img.shields.io/badge/Demo-YouTube-red?logo=youtube)](https://youtu.be/7VE8Qm21KM8)
 
@@ -8,9 +8,8 @@
 
 **[Watch the demo →](https://youtu.be/7VE8Qm21KM8)**
 
-Full spec: [openclaw_hackathon_baseline_architecture.md](openclaw_hackathon_baseline_architecture.md).
 
-For a short cheat sheet on adapters, extraction/retrieval/reasoning/verification, and OpenClaw’s role, see **Architecture Q&A** below (after the kickoff checklist).
+For a short cheat sheet on adapters, extraction/retrieval/reasoning/verification, and the agent layer, see **Architecture Q&A** below (after the kickoff checklist).
 
 **Phased prep plan with technology guide:** [docs/plan.md](docs/plan.md).
 
@@ -37,7 +36,7 @@ The repo is **past blank scaffolding** in a few areas, but **most pipeline modul
 
 - **Statute Harvester (Phase 1 per brief):** `Statute` / `StatuteFactor` models, Chroma + FTS5 hybrid retrieval, `GET /statutes/{id}`, `POST /statutes/search`, `GET /factors` — specified in [docs/phase1_plan.md](docs/phase1_plan.md); **not present in `backend/` yet** (e.g. `routes_statutes.py`, `retrieval/*` implementations).
 - **Parsing, chunking, case-law extraction runtime**, **retrieval indexes**, **reasoning**, **verification** — baseline modules exist as placeholder files.
-- **OpenClaw** — [openclaw/tools.json](openclaw/tools.json) / [openclaw/agent_prompt.md](openclaw/agent_prompt.md) not filled for statute tools.
+- **Agent layer** — [openclaw/tools.json](openclaw/tools.json) / [openclaw/agent_prompt.md](openclaw/agent_prompt.md) not filled for statute tools.
 
 ## Repo layout
 
@@ -59,7 +58,7 @@ backend/                  Python package — FastAPI app
   api/                    routes_ingest, routes_status (+ routes_search/answer/verify stub)
   smoke_check.py
 
-openclaw/                 agent_prompt.md, tools.json — minimal / empty
+openclaw/                 agent_prompt.md, tools.json — agent layer (minimal / empty)
 frontend/                 Next.js app: app/, components/ (UI placeholders)
 data/                     raw/, processed/, exports/, index/  (.gitkeep)
 docs/                     plan.md, phase1_plan.md, architecture.md, demo_script.md, ...
@@ -89,13 +88,13 @@ uvicorn backend.main:app --reload
 
 Use `/docs` for interactive OpenAPI. **Smallest working loop today:** `POST /ingest/url` or `/ingest/search` → rows in SQLite + `GET /status`.
 
-## Next milestones (aligned with hackathon + [docs/phase1_plan.md](docs/phase1_plan.md))
+## Next milestones (aligned with [docs/phase1_plan.md](docs/phase1_plan.md))
 
 1. **Data:** CA Vehicle Code ingest (e.g. leginfo) → `statutes` + `statute_factors` (or equivalent) with real `official_url` per row.
 2. **Retrieval:** implement Chroma + SQLite FTS5 + RRF hybrid search; `python -m backend.retrieval.build` (or equivalent) after ingest.
 3. **API:** statute lookup + search + factor listing; extend `/status` for statute counts and eval metadata.
 4. **UI:** wire `SearchPanel` / `ResultsPanel` / `SourceViewer` / `DatasetStatus` to those endpoints.
-5. **OpenClaw:** tools pointing at the statute API for judge demos.
+5. **Agent layer:** tools pointing at the statute API for demos.
 
 The checklist in [docs/plan.md](docs/plan.md) remains the broader baseline; [docs/phase1_plan.md](docs/phase1_plan.md) narrows Phase 1 to **California-only** `query → result → UI` on statutes.
 
@@ -108,4 +107,4 @@ The checklist in [docs/plan.md](docs/plan.md) remains the broader baseline; [doc
 
 ## Disclaimer
 
-Hackathon prototype. Not legal advice. Results limited to indexed public sources.
+Research prototype. Not legal advice. Results limited to indexed public sources.

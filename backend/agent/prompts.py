@@ -3,7 +3,7 @@
 Single source of truth — the agent loop imports `SYSTEM_PROMPT` directly.
 Keep the rules byte-stable; we want to be able to diff prompt drift later
 when we add eval. The phrases marked "verbatim" are required by the
-hackathon's source-grounding rules — do not paraphrase.
+source-grounding rules — do not paraphrase.
 """
 
 from __future__ import annotations

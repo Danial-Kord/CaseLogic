@@ -1,8 +1,7 @@
 # Design Notes
 
-Living delta log of decisions made during the build. Source-of-truth specs stay in
-[../openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md);
-this file only records *what we picked* + *why*.
+Living delta log of decisions made during the build. The baseline architecture spec is kept
+locally (not tracked in git); this file only records *what we picked* + *why*.
 
 ---
 
@@ -55,7 +54,7 @@ filtering. Don't add columns we won't surface in the UI (Failure Mode 3: too bro
 - Vector DB: Chroma (decision deferred until Phase 2 actually needs it; `chromadb` is
   already pinned).
 - Embeddings: deferred to Phase 2 — pick when we know what's reachable from the
-  hackathon network.
+  available network.
 
 ### Skipped this phase (intentionally)
 

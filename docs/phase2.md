@@ -7,9 +7,9 @@
 > | 1 | Statute search loop (CA VEH, query → result → UI) | **Shipped on `main`** | [phase1_plan.md](phase1_plan.md) |
 > | 2 | Complete corpus + measurable retrieval | **In progress (this doc)** | [phase2.md](phase2.md) |
 > | 3 | Source-grounded reasoning + verification | Pending | [phase3.md](phase3.md) |
-> | 4 | OpenClaw wiring + demo polish + freeze | Pending | [phase4.md](phase4.md) |
+> | 4 | Agent wiring + demo polish + freeze | Pending | [phase4.md](phase4.md) |
 >
-> Source of truth for module shapes: [../openclaw_hackathon_baseline_architecture.md](../openclaw_hackathon_baseline_architecture.md).
+> Source of truth for module shapes: baseline architecture doc (kept locally, not tracked).
 > This doc is the **owner + sequencing** layer over that.
 
 ---
